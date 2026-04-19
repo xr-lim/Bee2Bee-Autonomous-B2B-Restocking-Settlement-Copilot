@@ -32,19 +32,19 @@ function ChartCard({
 }) {
   return (
     <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-      <CardHeader className="border-b border-[#243047] p-4">
+      <CardHeader className="border-b border-[#243047] p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <CardTitle className="text-[16px] font-semibold text-[#E5E7EB]">
+            <CardTitle className="text-[17px] font-semibold text-[#E5E7EB]">
               {title}
             </CardTitle>
-            <p className="mt-1 text-[12px] leading-5 text-[#9CA3AF]">
+            <p className="mt-1.5 text-[14px] leading-6 text-[#9CA3AF]">
               {description}
             </p>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 p-4">
+      <CardContent className="space-y-5 p-5">
         <div className="h-[390px]">{children}</div>
         {footer ? <div>{footer}</div> : null}
       </CardContent>
@@ -169,18 +169,18 @@ export function DashboardCharts() {
               return (
                 <div
                   key={item.label}
-                  className="rounded-[10px] border border-[#243047] bg-[#172033] p-3"
+                  className="rounded-[10px] border border-[#243047] bg-[#172033] p-4"
                 >
                   <div className="flex items-center gap-2">
                     <span
                       className="size-2 rounded-full"
                       style={{ backgroundColor: item.color }}
                     />
-                    <p className="text-[12px] font-medium text-[#E5E7EB]">
+                    <p className="text-[13px] font-medium text-[#E5E7EB]">
                       {item.label}
                     </p>
                   </div>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-[13px]">
                     <Metric label="Stock" value={item.stock.toString()} />
                     <Metric label="AI threshold" value={item.threshold.toString()} />
                     <Metric
@@ -269,20 +269,20 @@ export function DashboardCharts() {
         description="Monthly demand with campaign periods highlighted for replenishment timing."
         footer={
           <div className="grid grid-cols-[220px_220px_1fr] gap-3">
-            <div className="rounded-[10px] border border-[#243047] bg-[#172033] p-3">
-              <p className="text-[12px] text-[#9CA3AF]">Annual demand</p>
-              <p className="mt-1 text-[18px] font-semibold text-[#E5E7EB]">
+            <div className="rounded-[10px] border border-[#243047] bg-[#172033] p-4">
+              <p className="text-[13px] text-[#9CA3AF]">Annual demand</p>
+              <p className="mt-1.5 text-[20px] font-semibold text-[#E5E7EB]">
                 {totalDemand.toLocaleString("en-US")} units
               </p>
             </div>
-            <div className="rounded-[10px] border border-[#243047] bg-[#172033] p-3">
-              <p className="text-[12px] text-[#9CA3AF]">Peak month</p>
-              <p className="mt-1 text-[18px] font-semibold text-[#E5E7EB]">
+            <div className="rounded-[10px] border border-[#243047] bg-[#172033] p-4">
+              <p className="text-[13px] text-[#9CA3AF]">Peak month</p>
+              <p className="mt-1.5 text-[20px] font-semibold text-[#E5E7EB]">
                 {peakDemand.month} / {peakDemand.demand.toLocaleString("en-US")}
               </p>
             </div>
-            <div className="rounded-[10px] border border-[#243047] bg-[#172033] p-3">
-              <p className="text-[12px] text-[#9CA3AF]">Promotion months</p>
+            <div className="rounded-[10px] border border-[#243047] bg-[#172033] p-4">
+              <p className="text-[13px] text-[#9CA3AF]">Promotion months</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {promoMonths.map((item) => (
                   <span

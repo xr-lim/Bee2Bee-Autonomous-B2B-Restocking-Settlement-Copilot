@@ -173,16 +173,9 @@ function RestockList() {
                   asChild
                   className="h-9 rounded-[10px] bg-[#3B82F6] px-3 text-white hover:bg-[#2563EB]"
                 >
-                  <Link href={`/conversations/${item.conversationId}`}>
-                    Start
+                  <Link href={`/inventory/${item.sku}`}>
+                    Review & restock
                   </Link>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="h-9 rounded-[10px] border-[#243047] bg-[#111827] px-3 text-[#E5E7EB] hover:bg-[#243047]"
-                >
-                  <Link href={`/inventory/${item.sku}`}>Details</Link>
                 </Button>
               </div>
             </article>
