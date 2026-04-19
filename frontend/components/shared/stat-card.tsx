@@ -29,18 +29,18 @@ export function StatCard({
 }: StatCardProps) {
   return (
     <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-      <CardContent className="p-5">
+      <CardContent className="p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[12px] font-medium text-[#9CA3AF]">{title}</p>
-            <p className="mt-3 text-[28px] font-semibold leading-none text-[#E5E7EB]">
+            <p className="text-[13px] font-medium text-[#9CA3AF]">{title}</p>
+            <p className="mt-3 text-[32px] font-semibold leading-none text-[#E5E7EB]">
               {value}
             </p>
           </div>
           {Icon ? (
             <div
               className={cn(
-                "flex size-10 items-center justify-center rounded-[10px]",
+                "flex size-11 items-center justify-center rounded-[10px]",
                 toneClassName[tone]
               )}
             >
@@ -49,7 +49,7 @@ export function StatCard({
           ) : null}
         </div>
         {change ? (
-          <p className="mt-4 text-[12px] text-[#6B7280]">{change}</p>
+          <p className="mt-4 text-[13px] text-[#9CA3AF]">{change}</p>
         ) : null}
       </CardContent>
     </Card>
