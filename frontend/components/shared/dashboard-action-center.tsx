@@ -7,12 +7,7 @@ import { useState } from "react"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import {
-  mockInvoices,
-  mockSuppliers,
-  restockRecommendations,
-} from "@/lib/mock-data"
-import type { Invoice, StatusTone } from "@/lib/types"
+import type { Invoice, RestockRecommendation, Supplier, StatusTone } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 type ActionPanel = "restock" | "invoice"
@@ -30,27 +25,33 @@ const riskTone: Record<Invoice["riskLevel"], StatusTone> = {
   "High Risk": "danger",
 }
 
-const invoiceItems = mockInvoices.filter((invoice) =>
-  ["Waiting Approval", "Needs Review", "Blocked"].includes(
-    invoice.approvalState
-  )
-)
-
-const totalRestockQuantity = restockRecommendations.reduce(
-  (total, item) => total + item.quantity,
-  0
-)
-
-function supplierName(supplierId: string) {
-  return (
-    mockSuppliers.find((supplier) => supplier.id === supplierId)?.name ??
-    "Unknown supplier"
-  )
-}
-
-export function DashboardActionCenter() {
+export function DashboardActionCenter({
+  invoices,
+  restockRecommendations,
+  suppliers,
+}: {
+  invoices: Invoice[]
+  restockRecommendations: RestockRecommendation[]
+  suppliers: Supplier[]
+}) {
   const [activePanel, setActivePanel] = useState<ActionPanel | null>(null)
+  const invoiceItems = invoices.filter((invoice) =>
+    ["Waiting Approval", "Needs Review", "Blocked"].includes(
+      invoice.approvalState
+    )
+  )
+  const totalRestockQuantity = restockRecommendations.reduce(
+    (total, item) => total + item.quantity,
+    0
+  )
   const actionInvoiceCount = invoiceItems.length
+
+  function supplierName(supplierId: string) {
+    return (
+      suppliers.find((supplier) => supplier.id === supplierId)?.name ??
+      "Unknown supplier"
+    )
+  }
 
   function togglePanel(panel: ActionPanel) {
     setActivePanel((current) => (current === panel ? null : panel))
@@ -130,13 +131,21 @@ export function DashboardActionCenter() {
         </button>
       </div>
 
-      {activePanel === "restock" ? <RestockList /> : null}
-      {activePanel === "invoice" ? <InvoiceList /> : null}
+      {activePanel === "restock" ? (
+        <RestockList restockRecommendations={restockRecommendations} />
+      ) : null}
+      {activePanel === "invoice" ? (
+        <InvoiceList invoiceItems={invoiceItems} supplierName={supplierName} />
+      ) : null}
     </section>
   )
 }
 
-function RestockList() {
+function RestockList({
+  restockRecommendations,
+}: {
+  restockRecommendations: RestockRecommendation[]
+}) {
   return (
     <Card className="rounded-[14px] border border-[#8B5CF6]/35 bg-[#111827] py-0 shadow-none ring-0">
       <CardContent className="p-4">
@@ -186,7 +195,13 @@ function RestockList() {
   )
 }
 
-function InvoiceList() {
+function InvoiceList({
+  invoiceItems,
+  supplierName,
+}: {
+  invoiceItems: Invoice[]
+  supplierName: (supplierId: string) => string
+}) {
   return (
     <Card className="rounded-[14px] border border-[#3B82F6]/35 bg-[#111827] py-0 shadow-none ring-0">
       <CardContent className="p-4">

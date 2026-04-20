@@ -16,12 +16,19 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  mockConversations,
-  mockInvoices,
-  mockProducts,
-  mockSuppliers,
-} from "@/lib/mock-data"
-import type { Conversation, NegotiationState, StatusTone } from "@/lib/types"
+  getConversations,
+  getInvoices,
+  getProducts,
+  getSuppliers,
+} from "@/lib/data"
+import type {
+  Conversation,
+  Invoice,
+  NegotiationState,
+  Product,
+  StatusTone,
+  Supplier,
+} from "@/lib/types"
 
 const priorityTone: Record<string, StatusTone> = {
   critical: "danger",
@@ -40,54 +47,19 @@ const stateTone: Record<NegotiationState, StatusTone> = {
   Closed: "success",
 }
 
-const statusGroups = [
-  {
-    title: "On Progress",
-    description: "Z.AI is actively negotiating or waiting on supplier response.",
-    tone: "ai" as StatusTone,
-    match: (conversation: Conversation) =>
-      ["Counter Offer Suggested", "Waiting Reply", "New Input"].includes(
-        conversation.negotiationState
-      ),
-  },
-  {
-    title: "Need Review",
-    description: "Messy input, missing fields, or escalation needs operator attention.",
-    tone: "warning" as StatusTone,
-    match: (conversation: Conversation) =>
-      ["Needs Analysis", "Escalated"].includes(conversation.negotiationState),
-  },
-  {
-    title: "Accepted, Invoice Need To Approve",
-    description: "Supplier terms accepted and invoice approval is still pending.",
-    tone: "success" as StatusTone,
-    match: (conversation: Conversation) =>
-      conversation.negotiationState === "Accepted" &&
-      linkedInvoiceStatus(conversation) !== "paid",
-  },
-  {
-    title: "Completed",
-    description: "Negotiation and invoice follow-up are closed.",
-    tone: "default" as StatusTone,
-    match: (conversation: Conversation) =>
-      conversation.negotiationState === "Closed" ||
-      linkedInvoiceStatus(conversation) === "paid",
-  },
-]
-
-function supplierName(supplierId: string) {
+function supplierName(suppliers: Supplier[], supplierId: string) {
   return (
-    mockSuppliers.find((supplier) => supplier.id === supplierId)?.name ??
+    suppliers.find((supplier) => supplier.id === supplierId)?.name ??
     "Unknown supplier"
   )
 }
 
-function productName(sku: string) {
-  return mockProducts.find((product) => product.sku === sku)?.name ?? sku
+function productName(products: Product[], sku: string) {
+  return products.find((product) => product.sku === sku)?.name ?? sku
 }
 
-function linkedInvoiceStatus(conversation: Conversation) {
-  const invoice = mockInvoices.find((item) =>
+function linkedInvoiceStatus(invoices: Invoice[], conversation: Conversation) {
+  const invoice = invoices.find((item) =>
     conversation.linkedSkus.includes(item.productSku)
   )
 
@@ -102,13 +74,57 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
   timeZone: "UTC",
 })
 
-const sortedConversations = [...mockConversations].sort(
-  (first, second) =>
-    new Date(second.lastMessageAt).getTime() -
-    new Date(first.lastMessageAt).getTime()
-)
+export default async function ConversationsPage() {
+  const [conversations, invoices, products, suppliers] = await Promise.all([
+    getConversations(),
+    getInvoices(),
+    getProducts(),
+    getSuppliers(),
+  ])
 
-export default function ConversationsPage() {
+  const sortedConversations = [...conversations].sort(
+    (first, second) =>
+      new Date(second.lastMessageAt).getTime() -
+      new Date(first.lastMessageAt).getTime()
+  )
+
+  const statusGroups = [
+    {
+      title: "On Progress",
+      description:
+        "Z.AI is actively negotiating or waiting on supplier response.",
+      tone: "ai" as StatusTone,
+      match: (conversation: Conversation) =>
+        ["Counter Offer Suggested", "Waiting Reply", "New Input"].includes(
+          conversation.negotiationState
+        ),
+    },
+    {
+      title: "Need Review",
+      description:
+        "Messy input, missing fields, or escalation needs operator attention.",
+      tone: "warning" as StatusTone,
+      match: (conversation: Conversation) =>
+        ["Needs Analysis", "Escalated"].includes(conversation.negotiationState),
+    },
+    {
+      title: "Accepted, Invoice Need To Approve",
+      description: "Supplier terms accepted and invoice approval is still pending.",
+      tone: "success" as StatusTone,
+      match: (conversation: Conversation) =>
+        conversation.negotiationState === "Accepted" &&
+        linkedInvoiceStatus(invoices, conversation) !== "paid",
+    },
+    {
+      title: "Completed",
+      description: "Negotiation and invoice follow-up are closed.",
+      tone: "default" as StatusTone,
+      match: (conversation: Conversation) =>
+        conversation.negotiationState === "Closed" ||
+        linkedInvoiceStatus(invoices, conversation) === "paid",
+    },
+  ]
+
   return (
     <>
       <PageHeader
@@ -224,13 +240,15 @@ export default function ConversationsPage() {
                       {conversation.id}
                     </TableCell>
                     <TableCell className="text-[15px] text-[#E5E7EB]">
-                      {supplierName(conversation.supplierId)}
+                      {supplierName(suppliers, conversation.supplierId)}
                     </TableCell>
                     <TableCell>
                       <SkuLinks skus={conversation.linkedSkus} />
                     </TableCell>
                     <TableCell className="max-w-[220px] whitespace-normal text-[15px] leading-5 text-[#9CA3AF]">
-                      {conversation.linkedSkus.map(productName).join(", ")}
+                      {conversation.linkedSkus
+                        .map((sku) => productName(products, sku))
+                        .join(", ")}
                     </TableCell>
                     <TableCell>
                       <StatusBadge label={conversation.source} tone="ai" />
@@ -240,7 +258,7 @@ export default function ConversationsPage() {
                     </TableCell>
                     <TableCell>
                       <StatusBadge
-                        label={statusLabel(conversation)}
+                        label={statusLabel(invoices, conversation)}
                         tone={stateTone[conversation.negotiationState]}
                       />
                     </TableCell>
@@ -320,10 +338,10 @@ function SkuLinks({ skus }: { skus: string[] }) {
   )
 }
 
-function statusLabel(conversation: Conversation) {
+function statusLabel(invoices: Invoice[], conversation: Conversation) {
   if (
     conversation.negotiationState === "Accepted" &&
-    linkedInvoiceStatus(conversation) !== "paid"
+    linkedInvoiceStatus(invoices, conversation) !== "paid"
   ) {
     return "Accepted, invoice need to approve"
   }

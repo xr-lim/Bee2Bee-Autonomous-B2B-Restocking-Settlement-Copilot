@@ -18,11 +18,25 @@ import {
 } from "recharts"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  inventoryHealthDistribution,
-  productStockDemandTrendBySku,
-  supplierExposureData,
-} from "@/lib/mock-data"
+
+type InventoryHealthItem = {
+  name: string
+  count: number
+  color: string
+}
+
+type SupplierExposureItem = {
+  supplier: string
+  products: number
+  color: string
+}
+
+type ProductStockDemandPoint = {
+  month: string
+  stock: number
+  demand: number
+  promotion: string
+}
 
 function subscribeToClientStore() {
   return () => {}
@@ -94,12 +108,31 @@ const tooltipItemStyle = {
   color: "#E5E7EB",
 }
 
-export function InventoryListCharts() {
+export function InventoryListCharts({
+  inventoryHealthDistribution,
+  supplierExposureData,
+}: {
+  inventoryHealthDistribution: InventoryHealthItem[]
+  supplierExposureData: SupplierExposureItem[]
+}) {
   const mounted = useSyncExternalStore(
     subscribeToClientStore,
     getClientSnapshot,
     getServerSnapshot
   )
+
+  if (inventoryHealthDistribution.length === 0 || supplierExposureData.length === 0) {
+    return (
+      <section className="grid grid-cols-2 gap-6">
+        <ChartCard title="Inventory Health Distribution">
+          <ChartPlaceholder />
+        </ChartCard>
+        <ChartCard title="Supplier Exposure Overview">
+          <ChartPlaceholder />
+        </ChartCard>
+      </section>
+    )
+  }
 
   if (!mounted) {
     return (
@@ -171,16 +204,21 @@ export function InventoryListCharts() {
   )
 }
 
-export function ProductStockDemandChart({ sku }: { sku: string }) {
+export function ProductStockDemandChart({ trend }: { trend: ProductStockDemandPoint[] }) {
   const mounted = useSyncExternalStore(
     subscribeToClientStore,
     getClientSnapshot,
     getServerSnapshot
   )
-  const trend =
-    productStockDemandTrendBySku[
-      sku as keyof typeof productStockDemandTrendBySku
-    ] ?? productStockDemandTrendBySku["SKU-ALM-8842"]
+
+  if (trend.length === 0) {
+    return (
+      <ChartCard title="365-Day Stock and Demand Trend">
+        <ChartPlaceholder />
+      </ChartCard>
+    )
+  }
+
   const promotions = trend.filter((item) => item.promotion)
 
   if (!mounted) {

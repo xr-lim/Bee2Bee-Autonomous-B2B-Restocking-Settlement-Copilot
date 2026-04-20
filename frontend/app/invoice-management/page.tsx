@@ -7,8 +7,8 @@ import { FilterToolbar } from "@/components/shared/filter-toolbar"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { mockInvoices, mockSuppliers } from "@/lib/mock-data"
-import type { Invoice, StatusTone } from "@/lib/types"
+import { getInvoices, getSuppliers } from "@/lib/data"
+import type { Invoice, StatusTone, Supplier } from "@/lib/types"
 
 const riskTone: Record<Invoice["riskLevel"], StatusTone> = {
   "Low Risk": "success",
@@ -49,9 +49,9 @@ const approvalLanes: Array<{
   },
 ]
 
-function supplierName(supplierId: string) {
+function supplierName(suppliers: Supplier[], supplierId: string) {
   return (
-    mockSuppliers.find((supplier) => supplier.id === supplierId)?.name ??
+    suppliers.find((supplier) => supplier.id === supplierId)?.name ??
     "Unknown supplier"
   )
 }
@@ -64,7 +64,9 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
   timeZone: "UTC",
 })
 
-export default function InvoiceManagementPage() {
+export default async function InvoiceManagementPage() {
+  const [invoices, suppliers] = await Promise.all([getInvoices(), getSuppliers()])
+
   return (
     <>
       <PageHeader
@@ -89,7 +91,7 @@ export default function InvoiceManagementPage() {
 
       <section className="grid grid-cols-3 gap-4">
         {approvalLanes.map((lane) => {
-          const invoices = mockInvoices.filter(
+          const invoicesByLane = invoices.filter(
             (invoice) => invoice.approvalState === lane.state
           )
 
@@ -118,15 +120,19 @@ export default function InvoiceManagementPage() {
                         color: lane.accent,
                       }}
                     >
-                      {invoices.length}
+                      {invoicesByLane.length}
                     </span>
                   </div>
                 </div>
 
                 <div className="space-y-3 p-3">
-                  {invoices.length > 0 ? (
-                    invoices.map((invoice) => (
-                      <InvoiceWorkCard key={invoice.id} invoice={invoice} />
+                  {invoicesByLane.length > 0 ? (
+                    invoicesByLane.map((invoice) => (
+                      <InvoiceWorkCard
+                        key={invoice.id}
+                        invoice={invoice}
+                        suppliers={suppliers}
+                      />
                     ))
                   ) : (
                     <EmptyState
@@ -146,7 +152,13 @@ export default function InvoiceManagementPage() {
   )
 }
 
-function InvoiceWorkCard({ invoice }: { invoice: Invoice }) {
+function InvoiceWorkCard({
+  invoice,
+  suppliers,
+}: {
+  invoice: Invoice
+  suppliers: Supplier[]
+}) {
   return (
     <article className="rounded-[12px] border border-[#243047] bg-[#172033] p-4 transition hover:border-[#3B82F6]/70 hover:bg-[#1B263C]">
       <div className="flex items-start justify-between gap-3">
@@ -155,7 +167,7 @@ function InvoiceWorkCard({ invoice }: { invoice: Invoice }) {
             {invoice.id}
           </p>
           <p className="mt-1 text-[13px] leading-5 text-[#9CA3AF]">
-            {supplierName(invoice.supplierId)}
+            {supplierName(suppliers, invoice.supplierId)}
           </p>
         </div>
         <p className="text-right text-[15px] font-semibold text-[#E5E7EB]">

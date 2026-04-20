@@ -18,15 +18,16 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  aiThresholdAnalysisBySku,
-  mockConversations,
-  mockProducts,
-  mockSuppliers,
-  productMonthlySummaryBySku,
-  restockRecommendations,
-  supplierBatchAdvantageNotes,
-  thresholdChangeRequests,
-} from "@/lib/mock-data"
+  getAiThresholdAnalysisBySku,
+  getConversations,
+  getProductMonthlySummaryBySku,
+  getProductStockDemandTrendBySku,
+  getProducts,
+  getRestockRecommendations,
+  getSupplierBatchAdvantageNotes,
+  getSuppliers,
+  getThresholdChangeRequests,
+} from "@/lib/data"
 import type { StatusTone, StockStatus } from "@/lib/types"
 
 const stockStatusTone: Record<StockStatus, StatusTone> = {
@@ -43,8 +44,9 @@ const stockStatusLabel: Record<StockStatus, string> = {
   "batch-candidate": "Batch Candidate",
 }
 
-export function generateStaticParams() {
-  return mockProducts.map((product) => ({ sku: product.sku }))
+export async function generateStaticParams() {
+  const products = await getProducts()
+  return products.map((product) => ({ sku: product.sku }))
 }
 
 export default async function InventoryDetailPage({
@@ -53,25 +55,54 @@ export default async function InventoryDetailPage({
   params: Promise<{ sku: string }>
 }) {
   const { sku } = await params
-  const product = mockProducts.find((item) => item.sku === decodeURIComponent(sku))
+  const [
+    products,
+    suppliers,
+    conversations,
+    productMonthlySummaryBySku,
+    aiThresholdAnalysisBySku,
+    supplierBatchAdvantageNotes,
+    restockRecommendations,
+    thresholdChangeRequests,
+    productStockDemandTrendBySku,
+  ] = await Promise.all([
+    getProducts(),
+    getSuppliers(),
+    getConversations(),
+    getProductMonthlySummaryBySku(),
+    getAiThresholdAnalysisBySku(),
+    getSupplierBatchAdvantageNotes(),
+    getRestockRecommendations(),
+    getThresholdChangeRequests(),
+    getProductStockDemandTrendBySku(),
+  ])
+
+  const product = products.find((item) => item.sku === decodeURIComponent(sku))
 
   if (!product) {
     notFound()
   }
 
-  const supplier = mockSuppliers.find((item) => item.id === product.supplierId)
-  const conversation = mockConversations.find(
+  const supplier = suppliers.find((item) => item.id === product.supplierId)
+  const conversation = conversations.find(
     (item) => item.id === product.conversationId
   )
   const monthlySummary =
     productMonthlySummaryBySku[
       product.sku as keyof typeof productMonthlySummaryBySku
-    ] ?? productMonthlySummaryBySku["SKU-ALM-8842"]
+    ] ?? []
   const analysis =
     aiThresholdAnalysisBySku[
       product.sku as keyof typeof aiThresholdAnalysisBySku
-    ] ?? aiThresholdAnalysisBySku["SKU-ALM-8842"]
-  const bundleProducts = mockProducts.filter(
+    ] ?? {
+      currentThreshold: product.aiThreshold,
+      recommendedThreshold: product.aiThreshold,
+      safetyBuffer: "N/A",
+      reorderUrgency: "N/A",
+      confidenceScore: 0,
+      explanation: "No AI threshold analysis found for this SKU in Supabase.",
+    }
+  const bundleProducts = products.filter(
     (item) => item.supplierId === product.supplierId
   )
   const thresholdMarginPercent = Math.round(
@@ -153,9 +184,15 @@ export default async function InventoryDetailPage({
         />
       ) : null}
 
-      <SupplierOptionsPanel product={product} suppliers={mockSuppliers} />
+      <SupplierOptionsPanel product={product} suppliers={suppliers} />
 
-      <ProductStockDemandChart sku={product.sku} />
+      <ProductStockDemandChart
+        trend={
+          productStockDemandTrendBySku[
+            product.sku as keyof typeof productStockDemandTrendBySku
+          ] ?? []
+        }
+      />
 
       <section className="grid grid-cols-[1fr_360px] gap-6">
         <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">

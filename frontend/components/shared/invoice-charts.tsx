@@ -16,11 +16,24 @@ import {
 } from "recharts"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  approvalPipelineDistribution,
-  invoiceRiskLevelDistribution,
-  supplierInvoiceVolume,
-} from "@/lib/mock-data"
+
+type InvoiceRiskLevelItem = {
+  name: string
+  count: number
+  color: string
+}
+
+type ApprovalPipelineItem = {
+  name: string
+  count: number
+  color: string
+}
+
+type SupplierInvoiceVolumeItem = {
+  supplier: string
+  invoices: number
+  color: string
+}
 
 function subscribeToClientStore() {
   return () => {}
@@ -82,12 +95,40 @@ const tooltipItemStyle = {
   color: "#E5E7EB",
 }
 
-export function InvoiceCharts() {
+export function InvoiceCharts({
+  approvalPipelineDistribution,
+  invoiceRiskLevelDistribution,
+  supplierInvoiceVolume,
+}: {
+  approvalPipelineDistribution: ApprovalPipelineItem[]
+  invoiceRiskLevelDistribution: InvoiceRiskLevelItem[]
+  supplierInvoiceVolume: SupplierInvoiceVolumeItem[]
+}) {
   const mounted = useSyncExternalStore(
     subscribeToClientStore,
     getClientSnapshot,
     getServerSnapshot
   )
+
+  if (
+    approvalPipelineDistribution.length === 0 ||
+    invoiceRiskLevelDistribution.length === 0 ||
+    supplierInvoiceVolume.length === 0
+  ) {
+    return (
+      <section className="grid grid-cols-3 gap-6">
+        <ChartCard title="Invoice Risk Distribution">
+          <ChartPlaceholder />
+        </ChartCard>
+        <ChartCard title="Approval Pipeline">
+          <ChartPlaceholder />
+        </ChartCard>
+        <ChartCard title="Supplier Invoice Volume">
+          <ChartPlaceholder />
+        </ChartCard>
+      </section>
+    )
+  }
 
   if (!mounted) {
     return (

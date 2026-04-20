@@ -23,15 +23,17 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  dashboardKpis,
-  insightCards,
-  mockInvoices,
-  mockProducts,
-  mockSuppliers,
-  restockRecommendations,
-  thresholdChangeRequests,
-} from "@/lib/mock-data"
-import type { Invoice, StatusTone } from "@/lib/types"
+  getDashboardKpis,
+  getInsightCards,
+  getInvoices,
+  getMonthlyDemandData,
+  getProducts,
+  getRestockRecommendations,
+  getStockTrendData,
+  getSuppliers,
+  getThresholdChangeRequests,
+} from "@/lib/data"
+import type { Invoice, StatusTone, Supplier } from "@/lib/types"
 
 const statIcons = [
   AlertTriangle,
@@ -53,13 +55,9 @@ const riskTone: Record<Invoice["riskLevel"], StatusTone> = {
   "High Risk": "danger",
 }
 
-const activeInvoices = mockInvoices.filter((invoice) =>
-  ["Waiting Approval", "Needs Review", "Blocked"].includes(invoice.approvalState)
-)
-
-function supplierName(supplierId: string) {
+function supplierName(suppliers: Supplier[], supplierId: string) {
   return (
-    mockSuppliers.find((supplier) => supplier.id === supplierId)?.name ??
+    suppliers.find((supplier) => supplier.id === supplierId)?.name ??
     "Unknown supplier"
   )
 }
@@ -69,7 +67,33 @@ function firstSentence(text: string) {
   return match ? match[1] : text
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const [
+    dashboardKpis,
+    insightCards,
+    invoices,
+    products,
+    suppliers,
+    restockRecommendations,
+    thresholdChangeRequests,
+    stockTrendData,
+    monthlyDemandData,
+  ] = await Promise.all([
+    getDashboardKpis(),
+    getInsightCards(),
+    getInvoices(),
+    getProducts(),
+    getSuppliers(),
+    getRestockRecommendations(),
+    getThresholdChangeRequests(),
+    getStockTrendData(),
+    getMonthlyDemandData(),
+  ])
+
+  const activeInvoices = invoices.filter((invoice) =>
+    ["Waiting Approval", "Needs Review", "Blocked"].includes(invoice.approvalState)
+  )
+
   return (
     <>
       <PageHeader
@@ -102,7 +126,7 @@ export default function DashboardPage() {
         <div className="space-y-8">
           <ThresholdChangeRequestList
             requests={thresholdChangeRequests}
-            products={mockProducts}
+            products={products}
             maxVisible={3}
             description="Z.AI threshold updates awaiting approval."
           />
@@ -217,7 +241,7 @@ export default function DashboardPage() {
                     >
                       <TableCell>
                         <p className="text-[15px] font-medium text-[#E5E7EB]">
-                          {supplierName(invoice.supplierId)}
+                          {supplierName(suppliers, invoice.supplierId)}
                         </p>
                         <p className="mt-1 font-mono text-[12px] text-[#6B7280]">
                           {invoice.id}
@@ -297,7 +321,10 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <DashboardCharts />
+      <DashboardCharts
+        monthlyDemandData={monthlyDemandData}
+        stockTrendData={stockTrendData}
+      />
     </>
   )
 }

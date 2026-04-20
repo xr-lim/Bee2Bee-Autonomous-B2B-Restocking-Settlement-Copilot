@@ -17,7 +17,22 @@ import {
 } from "recharts"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { monthlyDemandData, stockTrendData } from "@/lib/mock-data"
+
+type StockTrendPoint = {
+  date: string
+  proteinBars: number
+  proteinThreshold: number
+  coldBrew: number
+  coldBrewThreshold: number
+  rice: number
+  riceThreshold: number
+}
+
+type MonthlyDemandPoint = {
+  month: string
+  demand: number
+  promo: string
+}
 
 function ChartCard({
   title,
@@ -87,37 +102,6 @@ const tooltipItemStyle = {
   color: "#E5E7EB",
 }
 
-const latestStock = stockTrendData[stockTrendData.length - 1]
-const stockHighlights = [
-  {
-    label: "Protein Bars",
-    stock: latestStock.proteinBars,
-    threshold: latestStock.proteinThreshold,
-    color: "#3B82F6",
-  },
-  {
-    label: "Cold Brew",
-    stock: latestStock.coldBrew,
-    threshold: latestStock.coldBrewThreshold,
-    color: "#10B981",
-  },
-  {
-    label: "Jasmine Rice",
-    stock: latestStock.rice,
-    threshold: latestStock.riceThreshold,
-    color: "#F59E0B",
-  },
-]
-
-const totalDemand = monthlyDemandData.reduce(
-  (total, item) => total + item.demand,
-  0
-)
-const peakDemand = monthlyDemandData.reduce((peak, item) =>
-  item.demand > peak.demand ? item : peak
-)
-const promoMonths = monthlyDemandData.filter((item) => item.promo !== "Baseline")
-
 function subscribeToClientStore() {
   return () => {}
 }
@@ -130,12 +114,68 @@ function getServerSnapshot() {
   return false
 }
 
-export function DashboardCharts() {
+export function DashboardCharts({
+  monthlyDemandData,
+  stockTrendData,
+}: {
+  monthlyDemandData: MonthlyDemandPoint[]
+  stockTrendData: StockTrendPoint[]
+}) {
   const mounted = useSyncExternalStore(
     subscribeToClientStore,
     getClientSnapshot,
     getServerSnapshot
   )
+
+  if (stockTrendData.length === 0 || monthlyDemandData.length === 0) {
+    return (
+      <section className="grid gap-6">
+        <ChartCard
+          title="Stock Trend Overview"
+          description="Current stock and AI threshold movement for priority SKUs."
+        >
+          <ChartPlaceholder />
+        </ChartCard>
+        <ChartCard
+          title="Monthly Demand Analytics"
+          description="Demand pattern with promotion months highlighted for planning."
+        >
+          <ChartPlaceholder />
+        </ChartCard>
+      </section>
+    )
+  }
+
+  const latestStock = stockTrendData[stockTrendData.length - 1]
+  const stockHighlights = [
+    {
+      label: "Protein Bars",
+      stock: latestStock.proteinBars,
+      threshold: latestStock.proteinThreshold,
+      color: "#3B82F6",
+    },
+    {
+      label: "Cold Brew",
+      stock: latestStock.coldBrew,
+      threshold: latestStock.coldBrewThreshold,
+      color: "#10B981",
+    },
+    {
+      label: "Jasmine Rice",
+      stock: latestStock.rice,
+      threshold: latestStock.riceThreshold,
+      color: "#F59E0B",
+    },
+  ]
+
+  const totalDemand = monthlyDemandData.reduce(
+    (total, item) => total + item.demand,
+    0
+  )
+  const peakDemand = monthlyDemandData.reduce((peak, item) =>
+    item.demand > peak.demand ? item : peak
+  )
+  const promoMonths = monthlyDemandData.filter((item) => item.promo !== "Baseline")
 
   if (!mounted) {
     return (

@@ -15,8 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { buildInvoiceReasoning } from "@/lib/ai-reasoning"
-import { mockInvoices, mockProducts, mockSuppliers } from "@/lib/mock-data"
-import type { Invoice, StatusTone } from "@/lib/types"
+import { getInvoices, getProducts, getSuppliers } from "@/lib/data"
+import type { Invoice, Product, StatusTone } from "@/lib/types"
 
 const riskTone: Record<Invoice["riskLevel"], StatusTone> = {
   "Low Risk": "success",
@@ -31,8 +31,9 @@ const approvalTone: Record<Invoice["approvalState"], StatusTone> = {
   Completed: "success",
 }
 
-export function generateStaticParams() {
-  return mockInvoices.map((invoice) => ({ id: invoice.id }))
+export async function generateStaticParams() {
+  const invoices = await getInvoices()
+  return invoices.map((invoice) => ({ id: invoice.id }))
 }
 
 export default async function InvoiceDetailPage({
@@ -41,16 +42,21 @@ export default async function InvoiceDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const invoice = mockInvoices.find((item) => item.id === id)
+  const [invoices, products, suppliers] = await Promise.all([
+    getInvoices(),
+    getProducts(),
+    getSuppliers(),
+  ])
+  const invoice = invoices.find((item) => item.id === id)
 
   if (!invoice) {
     notFound()
   }
 
-  const supplier = mockSuppliers.find((item) => item.id === invoice.supplierId)
+  const supplier = suppliers.find((item) => item.id === invoice.supplierId)
   const linkedProducts = invoice.linkedSkus
-    .map((sku) => mockProducts.find((product) => product.sku === sku))
-    .filter((product) => Boolean(product))
+    .map((sku) => products.find((product) => product.sku === sku))
+    .filter((product): product is Product => Boolean(product))
   const isCompleted = invoice.approvalState === "Completed"
   const invoiceReasoning = buildInvoiceReasoning(invoice, supplier)
 

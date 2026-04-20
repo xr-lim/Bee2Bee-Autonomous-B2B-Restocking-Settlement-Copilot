@@ -7,8 +7,8 @@ import { FilterToolbar } from "@/components/shared/filter-toolbar"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { mockInvoices, mockSuppliers } from "@/lib/mock-data"
-import type { Invoice, StatusTone } from "@/lib/types"
+import { getInvoices, getSuppliers } from "@/lib/data"
+import type { Invoice, StatusTone, Supplier } from "@/lib/types"
 
 const riskTone: Record<Invoice["riskLevel"], StatusTone> = {
   "Low Risk": "success",
@@ -23,18 +23,6 @@ const validationTone: Record<Invoice["validationStatus"], StatusTone> = {
   "Missing Information": "warning",
 }
 
-const completedInvoices = mockInvoices
-  .filter((invoice) => invoice.approvalState === "Completed")
-  .toSorted(
-    (a, b) =>
-      new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
-  )
-
-const completedTotal = completedInvoices.reduce(
-  (total, invoice) => total + invoice.amount,
-  0
-)
-
 const dateFormatter = new Intl.DateTimeFormat("en", {
   day: "numeric",
   hour: "2-digit",
@@ -44,14 +32,26 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
   year: "numeric",
 })
 
-function supplierName(supplierId: string) {
+function supplierName(suppliers: Supplier[], supplierId: string) {
   return (
-    mockSuppliers.find((supplier) => supplier.id === supplierId)?.name ??
+    suppliers.find((supplier) => supplier.id === supplierId)?.name ??
     "Unknown supplier"
   )
 }
 
-export default function CompletedInvoicesPage() {
+export default async function CompletedInvoicesPage() {
+  const [invoices, suppliers] = await Promise.all([getInvoices(), getSuppliers()])
+  const completedInvoices = invoices
+    .filter((invoice) => invoice.approvalState === "Completed")
+    .toSorted(
+      (a, b) =>
+        new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
+    )
+  const completedTotal = completedInvoices.reduce(
+    (total, invoice) => total + invoice.amount,
+    0
+  )
+
   return (
     <>
       <PageHeader
@@ -113,7 +113,7 @@ export default function CompletedInvoicesPage() {
             <div className="col-span-2">
               <p className="text-[12px] text-[#6B7280]">Supplier</p>
               <p className="mt-0.5 truncate text-[14px] font-medium text-[#E5E7EB]">
-                {supplierName(invoice.supplierId)}
+                {supplierName(suppliers, invoice.supplierId)}
               </p>
             </div>
             <div className="col-span-2">

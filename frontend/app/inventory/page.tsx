@@ -8,16 +8,36 @@ import { RestockAlertPanel } from "@/components/shared/restock-alert-panel"
 import { StatCard } from "@/components/shared/stat-card"
 import { ThresholdChangeRequestList } from "@/components/shared/threshold-change-request-list"
 import {
-  inventorySummaryStats,
-  mockProducts,
-  mockSuppliers,
-  restockRecommendations,
-  thresholdChangeRequests,
-} from "@/lib/mock-data"
+  getInventoryHealthDistribution,
+  getInventorySummaryStats,
+  getProducts,
+  getRestockRecommendations,
+  getSupplierExposureData,
+  getSuppliers,
+  getThresholdChangeRequests,
+} from "@/lib/data"
 
 const summaryIcons = [Boxes, AlertTriangle, PackageCheck, Sparkles]
 
-export default function InventoryPage() {
+export default async function InventoryPage() {
+  const [
+    inventorySummaryStats,
+    products,
+    suppliers,
+    restockRecommendations,
+    thresholdChangeRequests,
+    inventoryHealthDistribution,
+    supplierExposureData,
+  ] = await Promise.all([
+    getInventorySummaryStats(),
+    getProducts(),
+    getSuppliers(),
+    getRestockRecommendations(),
+    getThresholdChangeRequests(),
+    getInventoryHealthDistribution(),
+    getSupplierExposureData(),
+  ])
+
   return (
     <>
       <PageHeader
@@ -43,17 +63,20 @@ export default function InventoryPage() {
 
       <ThresholdChangeRequestList
         requests={thresholdChangeRequests}
-        products={mockProducts}
+        products={products}
         description="Z.AI proposes these threshold updates based on velocity, lead time and bundle signals. Approve to apply instantly to the AI threshold column."
       />
 
-      <InventoryListCharts />
+      <InventoryListCharts
+        inventoryHealthDistribution={inventoryHealthDistribution}
+        supplierExposureData={supplierExposureData}
+      />
 
       <FilterToolbar searchPlaceholder="Search by SKU, product, supplier, or stock status..." />
 
       <InventoryTableClient
-        initialProducts={mockProducts}
-        suppliers={mockSuppliers}
+        initialProducts={products}
+        suppliers={suppliers}
       />
     </>
   )
