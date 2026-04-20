@@ -6,11 +6,10 @@ node_modules/
 out/
 build/
 
-# Stray npm lockfiles outside frontend/ (root + backend should not have them)
+# Do NOT create a package-lock.json in the repo root — Turbopack workspace
+# detection will get confused. The root package.json (db-init scripts) is
+# intentional and tracked; its lockfile should stay untracked/absent.
 /package-lock.json
-/backend/package-lock.json
-/package.json
-/backend/package.json
 
 # =========================
 # Python (Backend / Worker)
