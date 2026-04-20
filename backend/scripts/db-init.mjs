@@ -51,5 +51,20 @@ async function main() {
 
 main().catch((error) => {
   console.error("db:init failed:", error.message)
+
+  if (
+    error?.code === "ENOTFOUND" ||
+    String(error?.message ?? "").includes("ENOTFOUND")
+  ) {
+    console.error(
+      [
+        "Hint: DNS could not resolve your database host.",
+        "Use the Supabase Pooler connection string for SUPABASE_DB_URL",
+        "(Project Settings -> Database -> Connection string -> Pooler).",
+        "Then run: npm run db:init",
+      ].join("\n")
+    )
+  }
+
   process.exit(1)
 })

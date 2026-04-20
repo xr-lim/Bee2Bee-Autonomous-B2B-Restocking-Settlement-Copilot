@@ -1,0 +1,7 @@
+{
+  "name": "autonomous-b2b-restocking-settlement-copilot",
+  "private": true,
+  "scripts": {
+    "db:init": "npm --prefix backend run db:init"
+  }
+}
