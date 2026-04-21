@@ -29,6 +29,15 @@ async function main() {
     throw new Error("Schema file is empty: backend/supabase/schema.sql")
   }
 
+  if (/\bdrop\s+(table|column)\b/i.test(schemaSql)) {
+    console.warn(
+      [
+        "Warning: schema.sql contains destructive cleanup statements.",
+        "This removes legacy UI-only tables/columns before recreating the domain schema.",
+      ].join("\n")
+    )
+  }
+
   const client = new Client({
     connectionString: databaseUrl,
     ssl: { rejectUnauthorized: false },

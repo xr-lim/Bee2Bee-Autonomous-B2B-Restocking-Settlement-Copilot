@@ -4,33 +4,45 @@
       "id": "sup-001",
       "name": "Northstar Foods",
       "region": "MY",
-      "reliability_score": 95,
       "lead_time_days": 5,
-      "status": "preferred"
+      "reliability_score": 95,
+      "moq": 300,
+      "notes": "Primary supplier for pantry and snack replenishment.",
+      "created_at": "2026-04-18T00:00:00.000Z",
+      "updated_at": "2026-04-20T06:12:00.000Z"
     },
     {
       "id": "sup-002",
       "name": "Harbor Beverage Co.",
       "region": "SG",
-      "reliability_score": 91,
       "lead_time_days": 8,
-      "status": "preferred"
+      "reliability_score": 91,
+      "moq": 200,
+      "notes": "Supports split delivery, but freight caps need confirmation.",
+      "created_at": "2026-04-18T00:00:00.000Z",
+      "updated_at": "2026-04-20T04:40:00.000Z"
     },
     {
       "id": "sup-003",
       "name": "Pacific Snacks Supply",
       "region": "MY",
-      "reliability_score": 88,
       "lead_time_days": 6,
-      "status": "watchlist"
+      "reliability_score": 88,
+      "moq": 180,
+      "notes": "Reliable baseline snack replenishment supplier.",
+      "created_at": "2026-04-18T00:00:00.000Z",
+      "updated_at": "2026-04-19T15:00:00.000Z"
     },
     {
       "id": "sup-004",
       "name": "Evergreen Household Goods",
       "region": "TH",
-      "reliability_score": 86,
       "lead_time_days": 9,
-      "status": "watchlist"
+      "reliability_score": 86,
+      "moq": 150,
+      "notes": "Household supplier with MOQ exception potential.",
+      "created_at": "2026-04-18T00:00:00.000Z",
+      "updated_at": "2026-04-20T01:00:00.000Z"
     }
   ],
   "products": [
@@ -39,820 +51,633 @@
       "sku": "SKU-ALM-8842",
       "name": "Almond Protein Bar 12ct",
       "category": "Snacks",
-      "stock_on_hand": 418,
-      "reorder_point": 480,
+      "current_stock": 418,
+      "unit_price": 18.10,
       "static_threshold": 460,
       "ai_threshold": 520,
-      "unit_cost": 18.1,
-      "max_stock_amount": 1500,
-      "forecast_demand": 980,
-      "monthly_velocity": 860,
-      "trend_30d": -6,
-      "trend_365d": 14,
-      "supplier_id": "sup-001",
-      "conversation_id": "conv-1001",
-      "invoice_id": "inv-7001",
-      "status": "near-threshold",
-      "suppliers": [
-        {
-          "supplier_id": "sup-001",
-          "last_deal_price": 17.95,
-          "last_deal_date": "2026-04-10T00:00:00.000Z",
-          "lead_time_days": 5,
-          "moq": 300,
-          "reliability_score": 95,
-          "preferred": true,
-          "note": "Primary supplier"
-        }
-      ],
-      "pending_ai_analysis": false
+      "max_capacity": 1500,
+      "threshold_buffer": 60,
+      "status": "near_threshold",
+      "primary_supplier_id": "sup-001",
+      "created_at": "2026-04-18T00:00:00.000Z",
+      "updated_at": "2026-04-20T06:12:00.000Z"
     },
     {
       "id": "prd-002",
       "sku": "SKU-CFE-1290",
       "name": "Cold Brew Concentrate 1L",
       "category": "Beverage",
-      "stock_on_hand": 96,
-      "reorder_point": 180,
+      "current_stock": 96,
+      "unit_price": 22.10,
       "static_threshold": 170,
       "ai_threshold": 210,
-      "unit_cost": 22.1,
-      "max_stock_amount": 900,
-      "forecast_demand": 430,
-      "monthly_velocity": 390,
-      "trend_30d": 9,
-      "trend_365d": 22,
-      "supplier_id": "sup-002",
-      "conversation_id": "conv-1002",
-      "invoice_id": "inv-7002",
-      "status": "below-threshold",
-      "suppliers": [
-        {
-          "supplier_id": "sup-002",
-          "last_deal_price": 21.9,
-          "last_deal_date": "2026-04-11T00:00:00.000Z",
-          "lead_time_days": 8,
-          "moq": 200,
-          "reliability_score": 91,
-          "preferred": true,
-          "note": "Split delivery possible"
-        }
-      ],
-      "pending_ai_analysis": false
+      "max_capacity": 900,
+      "threshold_buffer": 40,
+      "status": "below_threshold",
+      "primary_supplier_id": "sup-002",
+      "created_at": "2026-04-18T00:00:00.000Z",
+      "updated_at": "2026-04-20T04:40:00.000Z"
     },
     {
       "id": "prd-003",
       "sku": "SKU-RCE-7740",
       "name": "Jasmine Rice 5kg",
       "category": "Pantry",
-      "stock_on_hand": 58,
-      "reorder_point": 160,
+      "current_stock": 58,
+      "unit_price": 15.90,
       "static_threshold": 150,
       "ai_threshold": 180,
-      "unit_cost": 15.9,
-      "max_stock_amount": 800,
-      "forecast_demand": 340,
-      "monthly_velocity": 300,
-      "trend_30d": 17,
-      "trend_365d": 19,
-      "supplier_id": "sup-001",
-      "conversation_id": "conv-1003",
-      "invoice_id": "inv-7003",
-      "status": "below-threshold",
-      "suppliers": [
-        {
-          "supplier_id": "sup-001",
-          "last_deal_price": 15.8,
-          "last_deal_date": "2026-04-09T00:00:00.000Z",
-          "lead_time_days": 5,
-          "moq": 250,
-          "reliability_score": 95,
-          "preferred": true
-        }
-      ],
-      "pending_ai_analysis": false
+      "max_capacity": 800,
+      "threshold_buffer": 30,
+      "status": "below_threshold",
+      "primary_supplier_id": "sup-001",
+      "created_at": "2026-04-18T00:00:00.000Z",
+      "updated_at": "2026-04-20T03:10:00.000Z"
     },
     {
       "id": "prd-004",
       "sku": "SKU-SNP-4471",
       "name": "Sea Salt Chips 30g x 24",
       "category": "Snacks",
-      "stock_on_hand": 740,
-      "reorder_point": 520,
+      "current_stock": 740,
+      "unit_price": 12.40,
       "static_threshold": 530,
       "ai_threshold": 560,
-      "unit_cost": 12.4,
-      "max_stock_amount": 1600,
-      "forecast_demand": 720,
-      "monthly_velocity": 640,
-      "trend_30d": -2,
-      "trend_365d": 8,
-      "supplier_id": "sup-003",
-      "conversation_id": "conv-1004",
-      "invoice_id": "inv-7004",
+      "max_capacity": 1600,
+      "threshold_buffer": 30,
       "status": "healthy",
-      "suppliers": [
-        {
-          "supplier_id": "sup-003",
-          "last_deal_price": 12.35,
-          "last_deal_date": "2026-04-08T00:00:00.000Z",
-          "lead_time_days": 6,
-          "moq": 180,
-          "reliability_score": 88,
-          "preferred": true
-        }
-      ],
-      "pending_ai_analysis": false
+      "primary_supplier_id": "sup-003",
+      "created_at": "2026-04-18T00:00:00.000Z",
+      "updated_at": "2026-04-19T15:00:00.000Z"
     },
     {
       "id": "prd-005",
       "sku": "SKU-LND-3021",
       "name": "Citrus Laundry Sheets 60ct",
       "category": "Household",
-      "stock_on_hand": 188,
-      "reorder_point": 300,
+      "current_stock": 188,
+      "unit_price": 11.80,
       "static_threshold": 290,
       "ai_threshold": 330,
-      "unit_cost": 11.8,
-      "max_stock_amount": 900,
-      "forecast_demand": 430,
-      "monthly_velocity": 390,
-      "trend_30d": 12,
-      "trend_365d": 25,
+      "max_capacity": 900,
+      "threshold_buffer": 40,
+      "status": "batch_candidate",
+      "primary_supplier_id": "sup-004",
+      "created_at": "2026-04-18T00:00:00.000Z",
+      "updated_at": "2026-04-20T01:00:00.000Z"
+    }
+  ],
+  "product_suppliers": [
+    {
+      "id": "ps-001",
+      "product_id": "prd-001",
+      "supplier_id": "sup-001",
+      "is_primary": true,
+      "created_at": "2026-04-18T00:00:00.000Z"
+    },
+    {
+      "id": "ps-002",
+      "product_id": "prd-002",
+      "supplier_id": "sup-002",
+      "is_primary": true,
+      "created_at": "2026-04-18T00:00:00.000Z"
+    },
+    {
+      "id": "ps-003",
+      "product_id": "prd-003",
+      "supplier_id": "sup-001",
+      "is_primary": true,
+      "created_at": "2026-04-18T00:00:00.000Z"
+    },
+    {
+      "id": "ps-004",
+      "product_id": "prd-004",
+      "supplier_id": "sup-003",
+      "is_primary": true,
+      "created_at": "2026-04-18T00:00:00.000Z"
+    },
+    {
+      "id": "ps-005",
+      "product_id": "prd-005",
       "supplier_id": "sup-004",
-      "conversation_id": "conv-1005",
-      "invoice_id": "inv-7005",
-      "status": "batch-candidate",
-      "suppliers": [
-        {
-          "supplier_id": "sup-004",
-          "last_deal_price": 11.7,
-          "last_deal_date": "2026-04-07T00:00:00.000Z",
-          "lead_time_days": 9,
-          "moq": 150,
-          "reliability_score": 86,
-          "preferred": true
-        }
-      ],
-      "pending_ai_analysis": true
-    }
-  ],
-  "conversations": [
-    {
-      "id": "conv-1001",
-      "product_sku": "SKU-ALM-8842",
-      "linked_skus": ["SKU-ALM-8842", "SKU-RCE-7740"],
-      "supplier_id": "sup-001",
-      "subject": "Protein bar + rice bundle negotiation",
-      "source": "Email",
-      "negotiation_state": "Counter Offer Suggested",
-      "latest_message": "We can hold price if bundle quantity is confirmed.",
-      "target_price_range": "$17.90 - $18.25",
-      "created_date": "2026-04-19T02:40:00.000Z",
-      "priority": "high",
-      "last_message_at": "2026-04-20T06:12:00.000Z",
-      "status": "negotiating",
-      "ai_extraction": {
-        "extracted_price": "$18.20",
-        "extracted_quantity": "1200",
-        "delivery_estimate": "Apr 25",
-        "supplier_language": "EN",
-        "detected_intent": "price-confirmation",
-        "missing_fields": [],
-        "confidence_score": 92
-      },
-      "next_action": {
-        "recommended_next_step": "Confirm bundle and lock freight cap.",
-        "negotiation_summary": "Supplier accepted target band with volume condition.",
-        "linked_invoice_status": "pending"
-      }
-    },
-    {
-      "id": "conv-1002",
-      "product_sku": "SKU-CFE-1290",
-      "linked_skus": ["SKU-CFE-1290"],
-      "supplier_id": "sup-002",
-      "subject": "Cold brew split delivery terms",
-      "source": "Chat App",
-      "negotiation_state": "Needs Analysis",
-      "latest_message": "Could deliver in two lots, freight may vary.",
-      "target_price_range": "$21.90 - $22.50",
-      "created_date": "2026-04-18T09:00:00.000Z",
-      "priority": "critical",
-      "last_message_at": "2026-04-20T04:40:00.000Z",
-      "status": "needs-reply",
-      "ai_extraction": {
-        "extracted_price": "$22.70",
-        "extracted_quantity": "480",
-        "delivery_estimate": "Apr 23 or Apr 29",
-        "supplier_language": "EN",
-        "detected_intent": "counter-offer",
-        "missing_fields": ["final freight"],
-        "confidence_score": 88
-      },
-      "next_action": {
-        "recommended_next_step": "Request fixed freight cap and final date.",
-        "negotiation_summary": "Price slightly above ceiling with uncertain freight.",
-        "linked_invoice_status": "needs review"
-      }
-    },
-    {
-      "id": "conv-1003",
-      "product_sku": "SKU-RCE-7740",
-      "linked_skus": ["SKU-RCE-7740"],
-      "supplier_id": "sup-001",
-      "subject": "Rice replenishment urgent slot",
-      "source": "Voice Note",
-      "negotiation_state": "Waiting Reply",
-      "latest_message": "Awaiting confirmation on expedited pickup.",
-      "target_price_range": "$15.80 - $16.25",
-      "created_date": "2026-04-19T11:20:00.000Z",
-      "priority": "critical",
-      "last_message_at": "2026-04-20T03:10:00.000Z",
-      "status": "waiting-supplier",
-      "ai_extraction": {
-        "extracted_price": "$16.10",
-        "extracted_quantity": "700",
-        "delivery_estimate": "Apr 24",
-        "supplier_language": "EN",
-        "detected_intent": "delivery-confirmation",
-        "missing_fields": [],
-        "confidence_score": 90
-      },
-      "next_action": {
-        "recommended_next_step": "Follow-up supplier on pickup slot.",
-        "negotiation_summary": "Commercial terms acceptable, waiting logistics confirmation.",
-        "linked_invoice_status": "pending"
-      }
-    },
-    {
-      "id": "conv-1004",
-      "product_sku": "SKU-SNP-4471",
-      "linked_skus": ["SKU-SNP-4471"],
-      "supplier_id": "sup-003",
-      "subject": "Snack baseline restock",
-      "source": "PDF",
-      "negotiation_state": "Accepted",
-      "latest_message": "Supplier accepted baseline price and qty.",
-      "target_price_range": "$12.20 - $12.60",
-      "created_date": "2026-04-17T08:00:00.000Z",
-      "priority": "medium",
-      "last_message_at": "2026-04-19T15:00:00.000Z",
-      "status": "resolved",
-      "ai_extraction": {
-        "extracted_price": "$12.40",
-        "extracted_quantity": "480",
-        "delivery_estimate": "Apr 26",
-        "supplier_language": "EN",
-        "detected_intent": "acceptance",
-        "missing_fields": [],
-        "confidence_score": 95
-      },
-      "next_action": {
-        "recommended_next_step": "Route invoice for approval.",
-        "negotiation_summary": "Deal accepted in target range.",
-        "linked_invoice_status": "waiting approval"
-      }
-    }
-  ],
-  "negotiation_messages": [
-    {
-      "id": "msg-1001",
-      "conversation_id": "conv-1001",
-      "supplier_id": "sup-001",
-      "type": "supplier-message",
-      "author": "supplier",
-      "body": "We can keep 18.20 if rice is bundled.",
-      "sentiment": "neutral",
-      "created_at": "2026-04-20T06:12:00.000Z",
-      "attachment_type": "email",
-      "attachment_label": "Offer revision",
-      "order_summary": null,
-      "invoice_id": null,
-      "language": "EN",
-      "translation": null
-    },
-    {
-      "id": "msg-1002",
-      "conversation_id": "conv-1001",
-      "supplier_id": "sup-001",
-      "type": "ai-recommendation",
-      "author": "ai",
-      "body": "Accept pricing if freight cap is fixed.",
-      "sentiment": "positive",
-      "created_at": "2026-04-20T06:14:00.000Z",
-      "attachment_type": null,
-      "attachment_label": null,
-      "order_summary": null,
-      "invoice_id": null,
-      "language": "EN",
-      "translation": null
-    },
-    {
-      "id": "msg-1003",
-      "conversation_id": "conv-1002",
-      "supplier_id": "sup-002",
-      "type": "supplier-message",
-      "author": "supplier",
-      "body": "Freight changes if split shipment is required.",
-      "sentiment": "risk",
-      "created_at": "2026-04-20T04:40:00.000Z",
-      "attachment_type": "screenshot",
-      "attachment_label": "Freight terms",
-      "order_summary": null,
-      "invoice_id": null,
-      "language": "EN",
-      "translation": null
-    },
-    {
-      "id": "msg-1004",
-      "conversation_id": "conv-1002",
-      "supplier_id": "sup-002",
-      "type": "merchant-action",
-      "author": "merchant",
-      "body": "Please lock final freight cap by end of day.",
-      "sentiment": "neutral",
-      "created_at": "2026-04-20T04:45:00.000Z",
-      "attachment_type": null,
-      "attachment_label": null,
-      "order_summary": null,
-      "invoice_id": null,
-      "language": "EN",
-      "translation": null
-    },
-    {
-      "id": "msg-1005",
-      "conversation_id": "conv-1003",
-      "supplier_id": "sup-001",
-      "type": "supplier-message",
-      "author": "supplier",
-      "body": "We can confirm pickup by tomorrow morning.",
-      "sentiment": "positive",
-      "created_at": "2026-04-20T03:10:00.000Z",
-      "attachment_type": "voice",
-      "attachment_label": "Pickup confirmation",
-      "order_summary": null,
-      "invoice_id": null,
-      "language": "EN",
-      "translation": null
-    },
-    {
-      "id": "msg-1006",
-      "conversation_id": "conv-1004",
-      "supplier_id": "sup-003",
-      "type": "supplier-message",
-      "author": "supplier",
-      "body": "Accepted. Proceed with standard lead time.",
-      "sentiment": "positive",
-      "created_at": "2026-04-19T15:00:00.000Z",
-      "attachment_type": "pdf",
-      "attachment_label": "Signed confirmation",
-      "order_summary": null,
-      "invoice_id": "inv-7004",
-      "language": "EN",
-      "translation": null
-    }
-  ],
-  "invoices": [
-    {
-      "id": "inv-7001",
-      "supplier_id": "sup-001",
-      "product_sku": "SKU-ALM-8842",
-      "linked_skus": ["SKU-ALM-8842", "SKU-RCE-7740"],
-      "workflow_id": "wf-1001",
-      "invoice_number": "NSF-APR-1001",
-      "amount": 48200,
-      "negotiated_amount": 47800,
-      "expected_quantity": 1200,
-      "invoice_quantity": 1200,
-      "unit_price": 18.2,
-      "subtotal": 47800,
-      "currency": "USD",
-      "risk": "waiting approval",
-      "risk_level": "Medium Risk",
-      "risk_reason": "Minor amount variance vs negotiated total.",
-      "validation_status": "Needs Review",
-      "approval_state": "Needs Review",
-      "source_type": "PDF",
-      "file_name": "nsf_apr_1001.pdf",
-      "file_size": "1.8 MB",
-      "bank_details": "Northstar Bank 1109",
-      "payment_terms": "Net 30",
-      "risk_confidence": 84,
-      "flags": {
-        "bank_details_issue": false,
-        "amount_mismatch": true,
-        "missing_fields": false,
-        "supplier_inconsistency": false
-      },
-      "mismatches": ["Amount variance +400"],
-      "history": [
-        {
-          "timestamp": "2026-04-20T02:30:00.000Z",
-          "title": "Invoice parsed",
-          "description": "Fields extracted from PDF."
-        },
-        {
-          "timestamp": "2026-04-20T02:35:00.000Z",
-          "title": "Risk flagged",
-          "description": "Amount variance detected."
-        }
-      ],
-      "notes": "Review and approve if freight note confirmed.",
-      "status": "pending",
-      "due_date": "2026-05-20",
-      "last_updated": "2026-04-20T02:36:00.000Z"
-    },
-    {
-      "id": "inv-7002",
-      "supplier_id": "sup-002",
-      "product_sku": "SKU-CFE-1290",
-      "linked_skus": ["SKU-CFE-1290"],
-      "workflow_id": "wf-1002",
-      "invoice_number": "HBC-APR-2201",
-      "amount": 10800,
-      "negotiated_amount": 10600,
-      "expected_quantity": 480,
-      "invoice_quantity": 480,
-      "unit_price": 22.5,
-      "subtotal": 10800,
-      "currency": "USD",
-      "risk": "needs review",
-      "risk_level": "High Risk",
-      "risk_reason": "Freight not finalized in attached terms.",
-      "validation_status": "Missing Information",
-      "approval_state": "Blocked",
-      "source_type": "Image",
-      "file_name": "hbc_apr_2201.png",
-      "file_size": "980 KB",
-      "bank_details": "Harbor Treasury 909",
-      "payment_terms": "Net 21",
-      "risk_confidence": 91,
-      "flags": {
-        "bank_details_issue": false,
-        "amount_mismatch": true,
-        "missing_fields": true,
-        "supplier_inconsistency": false
-      },
-      "mismatches": ["Missing freight cap", "Amount variance +200"],
-      "history": [
-        {
-          "timestamp": "2026-04-20T04:50:00.000Z",
-          "title": "Invoice parsed",
-          "description": "OCR extracted line items."
-        }
-      ],
-      "notes": "Hold until supplier confirms freight cap.",
-      "status": "blocked",
-      "due_date": "2026-05-15",
-      "last_updated": "2026-04-20T05:00:00.000Z"
-    },
-    {
-      "id": "inv-7003",
-      "supplier_id": "sup-001",
-      "product_sku": "SKU-RCE-7740",
-      "linked_skus": ["SKU-RCE-7740"],
-      "workflow_id": "wf-1003",
-      "invoice_number": "NSF-APR-1003",
-      "amount": 11300,
-      "negotiated_amount": 11300,
-      "expected_quantity": 700,
-      "invoice_quantity": 700,
-      "unit_price": 16.14,
-      "subtotal": 11300,
-      "currency": "USD",
-      "risk": "waiting approval",
-      "risk_level": "Low Risk",
-      "risk_reason": "All commercial fields validated.",
-      "validation_status": "Validated",
-      "approval_state": "Waiting Approval",
-      "source_type": "PDF",
-      "file_name": "nsf_apr_1003.pdf",
-      "file_size": "1.2 MB",
-      "bank_details": "Northstar Bank 1109",
-      "payment_terms": "Net 30",
-      "risk_confidence": 96,
-      "flags": {
-        "bank_details_issue": false,
-        "amount_mismatch": false,
-        "missing_fields": false,
-        "supplier_inconsistency": false
-      },
-      "mismatches": [],
-      "history": [
-        {
-          "timestamp": "2026-04-20T03:20:00.000Z",
-          "title": "Auto validated",
-          "description": "No discrepancies found."
-        }
-      ],
-      "notes": "Ready for approval.",
-      "status": "approved",
-      "due_date": "2026-05-18",
-      "last_updated": "2026-04-20T03:21:00.000Z"
-    },
-    {
-      "id": "inv-7004",
-      "supplier_id": "sup-003",
-      "product_sku": "SKU-SNP-4471",
-      "linked_skus": ["SKU-SNP-4471"],
-      "workflow_id": "wf-1004",
-      "invoice_number": "PSS-APR-4471",
-      "amount": 5950,
-      "negotiated_amount": 5950,
-      "expected_quantity": 480,
-      "invoice_quantity": 480,
-      "unit_price": 12.4,
-      "subtotal": 5950,
-      "currency": "USD",
-      "risk": "low risk",
-      "risk_level": "Low Risk",
-      "risk_reason": "Completed and paid.",
-      "validation_status": "Validated",
-      "approval_state": "Completed",
-      "source_type": "PDF",
-      "file_name": "pss_apr_4471.pdf",
-      "file_size": "820 KB",
-      "bank_details": "Pacific Commercial 455",
-      "payment_terms": "Net 14",
-      "risk_confidence": 97,
-      "flags": {
-        "bank_details_issue": false,
-        "amount_mismatch": false,
-        "missing_fields": false,
-        "supplier_inconsistency": false
-      },
-      "mismatches": [],
-      "history": [
-        {
-          "timestamp": "2026-04-19T16:00:00.000Z",
-          "title": "Payment settled",
-          "description": "Invoice completed successfully."
-        }
-      ],
-      "notes": "Closed.",
-      "status": "paid",
-      "due_date": "2026-05-10",
-      "last_updated": "2026-04-19T16:00:00.000Z"
-    }
-  ],
-  "restock_recommendations": [
-    {
-      "id": "restock-1001",
-      "sku": "SKU-ALM-8842",
-      "product_name": "Almond Protein Bar 12ct",
-      "supplier": "Northstar Foods",
-      "reason": "Approaching AI threshold before payday uplift.",
-      "current_stock": 418,
-      "ai_threshold": 520,
-      "target_price": "$17.90 - $18.25",
-      "quantity": 1200,
-      "estimated_spend": "$21.9K",
-      "automation_plan": [
-        "Confirm bundle quantity",
-        "Lock freight cap",
-        "Generate PO"
-      ],
-      "conversation_id": "conv-1001"
-    },
-    {
-      "id": "restock-1002",
-      "sku": "SKU-CFE-1290",
-      "product_name": "Cold Brew Concentrate 1L",
-      "supplier": "Harbor Beverage Co.",
-      "reason": "Below threshold with unstable freight terms.",
-      "current_stock": 96,
-      "ai_threshold": 210,
-      "target_price": "$21.90 - $22.50",
-      "quantity": 480,
-      "estimated_spend": "$10.8K",
-      "automation_plan": [
-        "Negotiate freight cap",
-        "Confirm split delivery",
-        "Route to finance review"
-      ],
-      "conversation_id": "conv-1002"
-    },
-    {
-      "id": "restock-1003",
-      "sku": "SKU-RCE-7740",
-      "product_name": "Jasmine Rice 5kg",
-      "supplier": "Northstar Foods",
-      "reason": "Critically below threshold, bundle candidate.",
-      "current_stock": 58,
-      "ai_threshold": 180,
-      "target_price": "$15.80 - $16.25",
-      "quantity": 700,
-      "estimated_spend": "$11.3K",
-      "automation_plan": [
-        "Bundle with protein bars",
-        "Confirm delivery slot",
-        "Generate replenishment order"
-      ],
-      "conversation_id": "conv-1003"
+      "is_primary": true,
+      "created_at": "2026-04-18T00:00:00.000Z"
     }
   ],
   "threshold_change_requests": [
     {
       "id": "thr-001",
-      "product_sku": "SKU-CFE-1290",
-      "product_name": "Cold Brew Concentrate 1L",
-      "current_threshold": 210,
+      "product_id": "prd-002",
+      "old_threshold": 210,
       "proposed_threshold": 240,
-      "change_percent": 14,
-      "reason": "Lead time shift + hot season uplift.",
-      "proposed_at": "2026-04-20T01:30:00.000Z",
+      "reason_type": "lead_time_shift",
+      "reason_summary": "Lead time drift and hot season uplift require a larger buffer.",
       "status": "pending",
-      "trigger": "lead-time-shift"
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "created_at": "2026-04-20T01:30:00.000Z",
+      "updated_at": "2026-04-20T01:30:00.000Z"
     },
     {
       "id": "thr-002",
-      "product_sku": "SKU-ALM-8842",
-      "product_name": "Almond Protein Bar 12ct",
-      "current_threshold": 520,
+      "product_id": "prd-001",
+      "old_threshold": 520,
       "proposed_threshold": 490,
-      "change_percent": -6,
-      "reason": "Post-promo velocity cooled.",
-      "proposed_at": "2026-04-20T01:50:00.000Z",
+      "reason_type": "demand_drop",
+      "reason_summary": "Post-promotion velocity cooled after the payday sale.",
       "status": "pending",
-      "trigger": "demand-drop"
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "created_at": "2026-04-20T01:50:00.000Z",
+      "updated_at": "2026-04-20T01:50:00.000Z"
     },
     {
       "id": "thr-003",
-      "product_sku": "SKU-RCE-7740",
-      "product_name": "Jasmine Rice 5kg",
-      "current_threshold": 180,
+      "product_id": "prd-003",
+      "old_threshold": 180,
       "proposed_threshold": 220,
-      "change_percent": 22,
-      "reason": "Sustained pantry demand and stockout risk.",
-      "proposed_at": "2026-04-20T02:10:00.000Z",
+      "reason_type": "demand_spike",
+      "reason_summary": "Sustained pantry demand increased stockout risk.",
       "status": "pending",
-      "trigger": "demand-spike"
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "created_at": "2026-04-20T02:10:00.000Z",
+      "updated_at": "2026-04-20T02:10:00.000Z"
     }
   ],
-  "app_config": [
+  "conversations": [
     {
-      "key": "dashboard_kpis",
-      "value": [
-        { "title": "Low Stock Alerts", "value": "3", "change": "2 below AI threshold", "tone": "warning" },
-        { "title": "AI Threshold Changes Today", "value": "3", "change": "3 pending approvals", "tone": "ai" },
-        { "title": "Open Conversations", "value": "4", "change": "2 need operator review", "tone": "default" },
-        { "title": "Invoices Waiting Approval", "value": "1", "change": "$11.3K pending", "tone": "danger" }
-      ]
+      "id": "conv-1001",
+      "supplier_id": "sup-001",
+      "title": "Protein bar and rice bundle negotiation",
+      "source": "email",
+      "state": "counter_offer",
+      "priority": "high",
+      "latest_message": "We can hold price if bundle quantity is confirmed.",
+      "linked_invoice_id": "inv-7001",
+      "created_at": "2026-04-19T02:40:00.000Z",
+      "updated_at": "2026-04-20T06:12:00.000Z"
     },
     {
-      "key": "insight_cards",
-      "value": {
-        "threshold_recommendation": {
-          "title": "AI Threshold Recommendation",
-          "value": "+14%",
-          "body": "Raise cold brew threshold to cover lead-time drift and demand uplift."
-        },
-        "recent_supplier_activity": [
-          "Northstar accepted bundle pricing window.",
-          "Harbor requested freight finalization.",
-          "Pacific closed April snack invoice."
-        ],
-        "approval_queue_summary": {
-          "invoices": 2,
-          "threshold_changes": 3,
-          "replenishment_orders": 3
-        }
-      }
+      "id": "conv-1002",
+      "supplier_id": "sup-002",
+      "title": "Cold brew split delivery terms",
+      "source": "whatsapp",
+      "state": "needs_analysis",
+      "priority": "critical",
+      "latest_message": "Could deliver in two lots, freight may vary.",
+      "linked_invoice_id": "inv-7002",
+      "created_at": "2026-04-18T09:00:00.000Z",
+      "updated_at": "2026-04-20T04:40:00.000Z"
     },
     {
-      "key": "stock_trend_data",
-      "value": [
-        { "date": "Apr 01", "protein_bars": 720, "protein_threshold": 470, "cold_brew": 310, "cold_brew_threshold": 180, "rice": 230, "rice_threshold": 160 },
-        { "date": "Apr 07", "protein_bars": 612, "protein_threshold": 490, "cold_brew": 220, "cold_brew_threshold": 196, "rice": 146, "rice_threshold": 170 },
-        { "date": "Apr 13", "protein_bars": 505, "protein_threshold": 515, "cold_brew": 138, "cold_brew_threshold": 208, "rice": 88, "rice_threshold": 178 },
-        { "date": "Apr 19", "protein_bars": 418, "protein_threshold": 520, "cold_brew": 96, "cold_brew_threshold": 210, "rice": 58, "rice_threshold": 180 }
-      ]
+      "id": "conv-1003",
+      "supplier_id": "sup-001",
+      "title": "Rice replenishment urgent slot",
+      "source": "voice_note",
+      "state": "waiting_reply",
+      "priority": "critical",
+      "latest_message": "Awaiting confirmation on expedited pickup.",
+      "linked_invoice_id": "inv-7003",
+      "created_at": "2026-04-19T11:20:00.000Z",
+      "updated_at": "2026-04-20T03:10:00.000Z"
     },
     {
-      "key": "monthly_demand_data",
-      "value": [
-        { "month": "Jan", "demand": 8400, "promo": "Baseline" },
-        { "month": "Feb", "demand": 9100, "promo": "Payday Sale" },
-        { "month": "Mar", "demand": 12600, "promo": "Raya" },
-        { "month": "Apr", "demand": 9800, "promo": "Baseline" }
-      ]
+      "id": "conv-1004",
+      "supplier_id": "sup-003",
+      "title": "Snack baseline restock",
+      "source": "pdf",
+      "state": "accepted",
+      "priority": "medium",
+      "latest_message": "Supplier accepted baseline price and quantity.",
+      "linked_invoice_id": "inv-7004",
+      "created_at": "2026-04-17T08:00:00.000Z",
+      "updated_at": "2026-04-19T15:00:00.000Z"
+    }
+  ],
+  "conversation_products": [
+    {
+      "id": "cp-001",
+      "conversation_id": "conv-1001",
+      "product_id": "prd-001"
     },
     {
-      "key": "inventory_summary_stats",
-      "value": [
-        { "title": "Total Active SKUs", "value": "5", "change": "4 suppliers tracked", "tone": "default" },
-        { "title": "Near Threshold", "value": "1", "change": "Protein bars", "tone": "warning" },
-        { "title": "Below Threshold", "value": "2", "change": "Requires restock", "tone": "danger" },
-        { "title": "Batch Restock Candidates", "value": "1", "change": "Same-supplier bundle", "tone": "ai" }
-      ]
+      "id": "cp-002",
+      "conversation_id": "conv-1001",
+      "product_id": "prd-003"
     },
     {
-      "key": "inventory_health_distribution",
-      "value": [
-        { "name": "Healthy", "count": 1, "color": "#10B981" },
-        { "name": "Near Threshold", "count": 1, "color": "#F59E0B" },
-        { "name": "Below Threshold", "count": 2, "color": "#EF4444" },
-        { "name": "Batch Candidate", "count": 1, "color": "#8B5CF6" }
-      ]
+      "id": "cp-003",
+      "conversation_id": "conv-1002",
+      "product_id": "prd-002"
     },
     {
-      "key": "supplier_exposure_data",
-      "value": [
-        { "supplier": "Northstar Foods", "products": 2, "color": "#3B82F6" },
-        { "supplier": "Harbor Beverage Co.", "products": 1, "color": "#F59E0B" },
-        { "supplier": "Pacific Snacks Supply", "products": 1, "color": "#10B981" },
-        { "supplier": "Evergreen Household Goods", "products": 1, "color": "#8B5CF6" }
-      ]
+      "id": "cp-004",
+      "conversation_id": "conv-1003",
+      "product_id": "prd-003"
     },
     {
-      "key": "product_stock_demand_trend_by_sku",
-      "value": {
-        "SKU-ALM-8842": [
-          { "month": "Jan", "stock": 650, "demand": 820, "promotion": "" },
-          { "month": "Feb", "stock": 590, "demand": 850, "promotion": "Payday Sale" },
-          { "month": "Mar", "stock": 505, "demand": 940, "promotion": "Raya" },
-          { "month": "Apr", "stock": 418, "demand": 680, "promotion": "" }
-        ],
-        "SKU-CFE-1290": [
-          { "month": "Jan", "stock": 212, "demand": 360, "promotion": "" },
-          { "month": "Feb", "stock": 174, "demand": 400, "promotion": "Payday Sale" },
-          { "month": "Mar", "stock": 132, "demand": 430, "promotion": "Raya" },
-          { "month": "Apr", "stock": 96, "demand": 380, "promotion": "" }
-        ]
-      }
+      "id": "cp-005",
+      "conversation_id": "conv-1004",
+      "product_id": "prd-004"
+    }
+  ],
+  "conversation_messages": [
+    {
+      "id": "msg-1001",
+      "conversation_id": "conv-1001",
+      "sender_type": "supplier",
+      "message_type": "email",
+      "content": "We can keep 18.20 if rice is bundled.",
+      "attachment_url": null,
+      "extracted_price": 18.20,
+      "extracted_quantity": 1200,
+      "detected_intent": "price_confirmation",
+      "missing_fields": [],
+      "created_at": "2026-04-20T06:12:00.000Z"
     },
     {
-      "key": "product_monthly_summary_by_sku",
-      "value": {
-        "SKU-ALM-8842": [
-          { "month": "Jan", "average_sales": 820, "seasonal_spike": "Normal", "promotion_note": "Baseline demand" },
-          { "month": "Feb", "average_sales": 850, "seasonal_spike": "Medium", "promotion_note": "Payday Sale lift" },
-          { "month": "Mar", "average_sales": 940, "seasonal_spike": "High", "promotion_note": "Raya pantry bundle" },
-          { "month": "Apr", "average_sales": 680, "seasonal_spike": "Normal", "promotion_note": "Replenishment lag" }
-        ],
-        "SKU-CFE-1290": [
-          { "month": "Jan", "average_sales": 360, "seasonal_spike": "Normal", "promotion_note": "Baseline demand" },
-          { "month": "Feb", "average_sales": 400, "seasonal_spike": "Medium", "promotion_note": "Payday Sale lift" },
-          { "month": "Mar", "average_sales": 430, "seasonal_spike": "High", "promotion_note": "Raya beverage bundle" },
-          { "month": "Apr", "average_sales": 380, "seasonal_spike": "High", "promotion_note": "Supplier split delivery risk" }
-        ]
-      }
+      "id": "msg-1002",
+      "conversation_id": "conv-1001",
+      "sender_type": "ai",
+      "message_type": "text",
+      "content": "Accept pricing if freight cap is fixed.",
+      "attachment_url": null,
+      "extracted_price": null,
+      "extracted_quantity": null,
+      "detected_intent": "recommendation",
+      "missing_fields": ["freight_cap"],
+      "created_at": "2026-04-20T06:14:00.000Z"
     },
     {
-      "key": "ai_threshold_analysis_by_sku",
-      "value": {
-        "SKU-ALM-8842": {
-          "current_threshold": 520,
-          "recommended_threshold": 610,
-          "safety_buffer": "15 days",
-          "reorder_urgency": "High",
-          "confidence_score": 91,
-          "explanation": "Demand remains elevated before payday cycle."
-        },
-        "SKU-CFE-1290": {
-          "current_threshold": 210,
-          "recommended_threshold": 260,
-          "safety_buffer": "10 days",
-          "reorder_urgency": "Critical",
-          "confidence_score": 94,
-          "explanation": "Current stock is below threshold with split-delivery risk."
-        }
-      }
+      "id": "msg-1003",
+      "conversation_id": "conv-1002",
+      "sender_type": "supplier",
+      "message_type": "image",
+      "content": "Freight changes if split shipment is required.",
+      "attachment_url": "/demo-attachments/freight-terms.png",
+      "extracted_price": 22.70,
+      "extracted_quantity": 480,
+      "detected_intent": "counter_offer",
+      "missing_fields": ["final_freight"],
+      "created_at": "2026-04-20T04:40:00.000Z"
     },
     {
-      "key": "supplier_batch_advantage_notes",
-      "value": {
-        "sup-001": "Combining pantry and snack items improves pallet utilization.",
-        "sup-002": "Batching is limited by split delivery terms.",
-        "sup-003": "Bundle only when promo reserve is needed.",
-        "sup-004": "Use MOQ exception to reduce approval cycles."
-      }
+      "id": "msg-1004",
+      "conversation_id": "conv-1002",
+      "sender_type": "merchant",
+      "message_type": "text",
+      "content": "Please lock final freight cap by end of day.",
+      "attachment_url": null,
+      "extracted_price": null,
+      "extracted_quantity": null,
+      "detected_intent": "request_confirmation",
+      "missing_fields": [],
+      "created_at": "2026-04-20T04:45:00.000Z"
     },
     {
-      "key": "invoice_risk_level_distribution",
-      "value": [
-        { "name": "Low Risk", "count": 2, "color": "#10B981" },
-        { "name": "Medium Risk", "count": 1, "color": "#F59E0B" },
-        { "name": "High Risk", "count": 1, "color": "#EF4444" }
-      ]
+      "id": "msg-1005",
+      "conversation_id": "conv-1003",
+      "sender_type": "supplier",
+      "message_type": "voice_note",
+      "content": "We can confirm pickup by tomorrow morning.",
+      "attachment_url": "/demo-attachments/pickup-confirmation.m4a",
+      "extracted_price": 16.10,
+      "extracted_quantity": 700,
+      "detected_intent": "delivery_confirmation",
+      "missing_fields": [],
+      "created_at": "2026-04-20T03:10:00.000Z"
     },
     {
-      "key": "approval_pipeline_distribution",
-      "value": [
-        { "name": "Waiting Approval", "count": 1, "color": "#3B82F6" },
-        { "name": "Needs Review", "count": 1, "color": "#F59E0B" },
-        { "name": "Blocked", "count": 1, "color": "#EF4444" },
-        { "name": "Completed", "count": 1, "color": "#10B981" }
-      ]
+      "id": "msg-1006",
+      "conversation_id": "conv-1004",
+      "sender_type": "supplier",
+      "message_type": "pdf",
+      "content": "Accepted. Proceed with standard lead time.",
+      "attachment_url": "/demo-attachments/signed-confirmation.pdf",
+      "extracted_price": 12.40,
+      "extracted_quantity": 480,
+      "detected_intent": "acceptance",
+      "missing_fields": [],
+      "created_at": "2026-04-19T15:00:00.000Z"
+    }
+  ],
+  "workflows": [
+    {
+      "id": "wf-1001",
+      "product_id": "prd-001",
+      "current_state": "ready_for_approval",
+      "target_price_min": 17.90,
+      "target_price_max": 18.25,
+      "quantity": 1200,
+      "conversation_id": "conv-1001",
+      "invoice_id": "inv-7001",
+      "approval_state": "needs_review",
+      "created_at": "2026-04-19T02:40:00.000Z",
+      "updated_at": "2026-04-20T06:20:00.000Z"
     },
     {
-      "key": "supplier_invoice_volume",
-      "value": [
-        { "supplier": "Northstar Foods", "invoices": 2, "color": "#3B82F6" },
-        { "supplier": "Harbor Beverage Co.", "invoices": 1, "color": "#F59E0B" },
-        { "supplier": "Pacific Snacks Supply", "invoices": 1, "color": "#10B981" }
-      ]
+      "id": "wf-1002",
+      "product_id": "prd-002",
+      "current_state": "blocked",
+      "target_price_min": 21.90,
+      "target_price_max": 22.50,
+      "quantity": 480,
+      "conversation_id": "conv-1002",
+      "invoice_id": "inv-7002",
+      "approval_state": "blocked",
+      "created_at": "2026-04-18T09:00:00.000Z",
+      "updated_at": "2026-04-20T05:00:00.000Z"
+    },
+    {
+      "id": "wf-1003",
+      "product_id": "prd-003",
+      "current_state": "ready_for_approval",
+      "target_price_min": 15.80,
+      "target_price_max": 16.25,
+      "quantity": 700,
+      "conversation_id": "conv-1003",
+      "invoice_id": "inv-7003",
+      "approval_state": "waiting_approval",
+      "created_at": "2026-04-19T11:20:00.000Z",
+      "updated_at": "2026-04-20T03:21:00.000Z"
+    },
+    {
+      "id": "wf-1004",
+      "product_id": "prd-004",
+      "current_state": "completed",
+      "target_price_min": 12.20,
+      "target_price_max": 12.60,
+      "quantity": 480,
+      "conversation_id": "conv-1004",
+      "invoice_id": "inv-7004",
+      "approval_state": "completed",
+      "created_at": "2026-04-17T08:00:00.000Z",
+      "updated_at": "2026-04-19T16:00:00.000Z"
+    }
+  ],
+  "workflow_events": [
+    {
+      "id": "we-1001",
+      "workflow_id": "wf-1001",
+      "state": "supplier_prep",
+      "note": "AI restock workflow started for protein bar bundle.",
+      "actor_type": "ai",
+      "created_at": "2026-04-19T02:41:00.000Z"
+    },
+    {
+      "id": "we-1002",
+      "workflow_id": "wf-1001",
+      "state": "ready_for_approval",
+      "note": "Supplier accepted target band with volume condition.",
+      "actor_type": "supplier",
+      "created_at": "2026-04-20T06:20:00.000Z"
+    },
+    {
+      "id": "we-1003",
+      "workflow_id": "wf-1002",
+      "state": "blocked",
+      "note": "Invoice blocked until final freight cap is confirmed.",
+      "actor_type": "finance",
+      "created_at": "2026-04-20T05:00:00.000Z"
+    },
+    {
+      "id": "we-1004",
+      "workflow_id": "wf-1003",
+      "state": "ready_for_approval",
+      "note": "Commercial terms validated; waiting for approval.",
+      "actor_type": "ai",
+      "created_at": "2026-04-20T03:21:00.000Z"
+    },
+    {
+      "id": "we-1005",
+      "workflow_id": "wf-1004",
+      "state": "completed",
+      "note": "Snack restock invoice completed and settled.",
+      "actor_type": "finance",
+      "created_at": "2026-04-19T16:00:00.000Z"
+    }
+  ],
+  "invoices": [
+    {
+      "id": "inv-7001",
+      "invoice_number": "NSF-APR-1001",
+      "supplier_id": "sup-001",
+      "workflow_id": "wf-1001",
+      "source_type": "pdf",
+      "file_url": "/demo-invoices/nsf-apr-1001.pdf",
+      "amount": 21222.00,
+      "currency": "USD",
+      "quantity": 1200,
+      "payment_terms": "Net 30",
+      "bank_details": "Northstar Bank 1109",
+      "validation_status": "mismatch_detected",
+      "risk_level": "medium",
+      "approval_state": "needs_review",
+      "created_at": "2026-04-20T02:30:00.000Z",
+      "updated_at": "2026-04-20T02:36:00.000Z"
+    },
+    {
+      "id": "inv-7002",
+      "invoice_number": "HBC-APR-2201",
+      "supplier_id": "sup-002",
+      "workflow_id": "wf-1002",
+      "source_type": "image",
+      "file_url": "/demo-invoices/hbc-apr-2201.png",
+      "amount": 10800.00,
+      "currency": "USD",
+      "quantity": 480,
+      "payment_terms": "Net 21",
+      "bank_details": "Harbor Treasury 909",
+      "validation_status": "missing_information",
+      "risk_level": "high",
+      "approval_state": "blocked",
+      "created_at": "2026-04-20T04:50:00.000Z",
+      "updated_at": "2026-04-20T05:00:00.000Z"
+    },
+    {
+      "id": "inv-7003",
+      "invoice_number": "NSF-APR-1003",
+      "supplier_id": "sup-001",
+      "workflow_id": "wf-1003",
+      "source_type": "pdf",
+      "file_url": "/demo-invoices/nsf-apr-1003.pdf",
+      "amount": 11298.00,
+      "currency": "USD",
+      "quantity": 700,
+      "payment_terms": "Net 30",
+      "bank_details": "Northstar Bank 1109",
+      "validation_status": "validated",
+      "risk_level": "low",
+      "approval_state": "waiting_approval",
+      "created_at": "2026-04-20T03:20:00.000Z",
+      "updated_at": "2026-04-20T03:21:00.000Z"
+    },
+    {
+      "id": "inv-7004",
+      "invoice_number": "PSS-APR-4471",
+      "supplier_id": "sup-003",
+      "workflow_id": "wf-1004",
+      "source_type": "pdf",
+      "file_url": "/demo-invoices/pss-apr-4471.pdf",
+      "amount": 5952.00,
+      "currency": "USD",
+      "quantity": 480,
+      "payment_terms": "Net 14",
+      "bank_details": "Pacific Commercial 455",
+      "validation_status": "validated",
+      "risk_level": "low",
+      "approval_state": "completed",
+      "created_at": "2026-04-19T16:00:00.000Z",
+      "updated_at": "2026-04-19T16:00:00.000Z"
+    }
+  ],
+  "invoice_products": [
+    {
+      "id": "ip-1001",
+      "invoice_id": "inv-7001",
+      "product_id": "prd-001",
+      "quantity": 900,
+      "unit_price": 18.20,
+      "subtotal": 16380.00
+    },
+    {
+      "id": "ip-1002",
+      "invoice_id": "inv-7001",
+      "product_id": "prd-003",
+      "quantity": 300,
+      "unit_price": 16.14,
+      "subtotal": 4842.00
+    },
+    {
+      "id": "ip-1003",
+      "invoice_id": "inv-7002",
+      "product_id": "prd-002",
+      "quantity": 480,
+      "unit_price": 22.50,
+      "subtotal": 10800.00
+    },
+    {
+      "id": "ip-1004",
+      "invoice_id": "inv-7003",
+      "product_id": "prd-003",
+      "quantity": 700,
+      "unit_price": 16.14,
+      "subtotal": 11298.00
+    },
+    {
+      "id": "ip-1005",
+      "invoice_id": "inv-7004",
+      "product_id": "prd-004",
+      "quantity": 480,
+      "unit_price": 12.40,
+      "subtotal": 5952.00
+    }
+  ],
+  "invoice_validation_results": [
+    {
+      "id": "ivr-1001",
+      "invoice_id": "inv-7001",
+      "check_name": "amount_matches_negotiated_terms",
+      "expected_value": "21222.00",
+      "actual_value": "21222.00 plus unconfirmed freight",
+      "result": "warning",
+      "created_at": "2026-04-20T02:35:00.000Z"
+    },
+    {
+      "id": "ivr-1002",
+      "invoice_id": "inv-7001",
+      "check_name": "bank_details_match_supplier",
+      "expected_value": "Northstar Bank 1109",
+      "actual_value": "Northstar Bank 1109",
+      "result": "passed",
+      "created_at": "2026-04-20T02:35:00.000Z"
+    },
+    {
+      "id": "ivr-1003",
+      "invoice_id": "inv-7002",
+      "check_name": "freight_cap_present",
+      "expected_value": "Fixed freight cap",
+      "actual_value": "Missing",
+      "result": "failed",
+      "created_at": "2026-04-20T04:55:00.000Z"
+    },
+    {
+      "id": "ivr-1004",
+      "invoice_id": "inv-7002",
+      "check_name": "quantity_matches_conversation",
+      "expected_value": "480",
+      "actual_value": "480",
+      "result": "passed",
+      "created_at": "2026-04-20T04:55:00.000Z"
+    },
+    {
+      "id": "ivr-1005",
+      "invoice_id": "inv-7003",
+      "check_name": "commercial_terms_validated",
+      "expected_value": "Price, quantity, supplier, bank details",
+      "actual_value": "All matched",
+      "result": "passed",
+      "created_at": "2026-04-20T03:20:00.000Z"
+    },
+    {
+      "id": "ivr-1006",
+      "invoice_id": "inv-7004",
+      "check_name": "payment_settled",
+      "expected_value": "Completed",
+      "actual_value": "Completed",
+      "result": "passed",
+      "created_at": "2026-04-19T16:00:00.000Z"
+    }
+  ],
+  "invoice_actions": [
+    {
+      "id": "ia-1001",
+      "invoice_id": "inv-7001",
+      "action_type": "parsed",
+      "note": "Fields extracted from PDF.",
+      "actor_type": "ai",
+      "created_at": "2026-04-20T02:30:00.000Z"
+    },
+    {
+      "id": "ia-1002",
+      "invoice_id": "inv-7001",
+      "action_type": "risk_flagged",
+      "note": "Review and approve if freight note is confirmed.",
+      "actor_type": "finance",
+      "created_at": "2026-04-20T02:35:00.000Z"
+    },
+    {
+      "id": "ia-1003",
+      "invoice_id": "inv-7002",
+      "action_type": "parsed",
+      "note": "OCR extracted line items from image.",
+      "actor_type": "ai",
+      "created_at": "2026-04-20T04:50:00.000Z"
+    },
+    {
+      "id": "ia-1004",
+      "invoice_id": "inv-7002",
+      "action_type": "blocked",
+      "note": "Hold until supplier confirms freight cap.",
+      "actor_type": "finance",
+      "created_at": "2026-04-20T05:00:00.000Z"
+    },
+    {
+      "id": "ia-1005",
+      "invoice_id": "inv-7003",
+      "action_type": "validated",
+      "note": "No discrepancies found.",
+      "actor_type": "ai",
+      "created_at": "2026-04-20T03:20:00.000Z"
+    },
+    {
+      "id": "ia-1006",
+      "invoice_id": "inv-7004",
+      "action_type": "completed",
+      "note": "Invoice completed successfully.",
+      "actor_type": "finance",
+      "created_at": "2026-04-19T16:00:00.000Z"
     }
   ]
 }

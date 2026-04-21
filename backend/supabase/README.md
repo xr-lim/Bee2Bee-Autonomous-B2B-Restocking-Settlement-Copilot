@@ -32,7 +32,11 @@ Run:
 
 - npm run db:seed
 
-The seed script upserts rows by `id` (or `key` for app_config).
+The seed script upserts each domain table by `id`.
+
+`schema.sql` now removes the legacy UI-only demo tables before recreating the
+domain schema, so run it only against a database where replacing the old
+hackathon demo shape is intended.
 
 ## 5) Notes
 

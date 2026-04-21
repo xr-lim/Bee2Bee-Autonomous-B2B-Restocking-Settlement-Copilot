@@ -15,36 +15,19 @@ const __dirname = path.dirname(__filename)
 
 const TABLE_CONFIG = [
   { name: "suppliers", conflictKey: "id", jsonbCols: [] },
-  { name: "products", conflictKey: "id", jsonbCols: ["suppliers"] },
-  {
-    name: "conversations",
-    conflictKey: "id",
-    jsonbCols: ["ai_extraction", "next_action"],
-  },
-  {
-    name: "negotiation_messages",
-    conflictKey: "id",
-    jsonbCols: ["order_summary"],
-  },
-  { name: "invoices", conflictKey: "id", jsonbCols: ["flags", "history"] },
-  { name: "restock_recommendations", conflictKey: "id", jsonbCols: [] },
+  { name: "products", conflictKey: "id", jsonbCols: [] },
+  { name: "product_suppliers", conflictKey: "id", jsonbCols: [] },
   { name: "threshold_change_requests", conflictKey: "id", jsonbCols: [] },
-  { name: "app_config", conflictKey: "key", jsonbCols: ["value"] },
+  { name: "conversations", conflictKey: "id", jsonbCols: [] },
+  { name: "conversation_products", conflictKey: "id", jsonbCols: [] },
+  { name: "conversation_messages", conflictKey: "id", jsonbCols: [] },
+  { name: "workflows", conflictKey: "id", jsonbCols: [] },
+  { name: "workflow_events", conflictKey: "id", jsonbCols: [] },
+  { name: "invoices", conflictKey: "id", jsonbCols: [] },
+  { name: "invoice_products", conflictKey: "id", jsonbCols: [] },
+  { name: "invoice_validation_results", conflictKey: "id", jsonbCols: [] },
+  { name: "invoice_actions", conflictKey: "id", jsonbCols: [] },
 ]
-
-function applyLegacyAliases(tableName, row) {
-  const normalized = { ...row }
-
-  if (
-    tableName === "products" &&
-    normalized.current_stock == null &&
-    normalized.stock_on_hand != null
-  ) {
-    normalized.current_stock = normalized.stock_on_hand
-  }
-
-  return normalized
-}
 
 function uniqueColumns(rows) {
   const keys = new Set()
@@ -110,21 +93,17 @@ async function main() {
         continue
       }
 
-      const normalizedRows = rows.map((row) =>
-        applyLegacyAliases(config.name, row)
-      )
-
-      const columns = uniqueColumns(normalizedRows)
+      const columns = uniqueColumns(rows)
       const { sql, values } = buildInsertSQL(
         config.name,
         columns,
-        normalizedRows,
+        rows,
         config.conflictKey,
         config.jsonbCols
       )
 
       await client.query(sql, values)
-      console.log(`Seeded ${config.name}: ${normalizedRows.length} row(s)`)
+      console.log(`Seeded ${config.name}: ${rows.length} row(s)`)
     }
 
     await client.query("COMMIT")
