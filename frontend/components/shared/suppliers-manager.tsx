@@ -301,7 +301,7 @@ export function SuppliersManager({
           })}
           {filteredSuppliers.length === 0 ? (
             <li className="px-5 py-8 text-center text-[13px] text-[#6B7280]">
-              No suppliers match "{query}".
+              No suppliers match &quot;{query}&quot;.
             </li>
           ) : null}
         </ul>

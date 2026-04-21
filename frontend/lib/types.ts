@@ -136,6 +136,9 @@ export type ConversationSource =
   | "WhatsApp"
   | "Telegram"
   | "WeChat"
+  | "PDF"
+  | "Image"
+  | "Voice Note"
 
 export type NegotiationState =
   | "New Input"

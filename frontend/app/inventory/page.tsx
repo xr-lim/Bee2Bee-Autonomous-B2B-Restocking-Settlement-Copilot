@@ -1,4 +1,4 @@
-import { AlertTriangle, Boxes, PackageCheck, Sparkles } from "lucide-react"
+import { AlertTriangle, Boxes, PackageCheck } from "lucide-react"
 
 import { PageHeader } from "@/components/layout/page-header"
 import { FilterToolbar } from "@/components/shared/filter-toolbar"
@@ -14,7 +14,7 @@ import {
   getThresholdChangeRequests,
 } from "@/lib/data"
 
-const summaryIcons = [Boxes, AlertTriangle, PackageCheck, Sparkles]
+const summaryIcons = [Boxes, AlertTriangle, PackageCheck]
 
 export default async function InventoryPage() {
   const [
@@ -39,7 +39,7 @@ export default async function InventoryPage() {
         description="Track current stock, AI threshold changes, and supplier-linked restocking opportunities."
       />
 
-      <section className="grid grid-cols-4 gap-4">
+      <section className="grid grid-cols-3 gap-4">
         {inventorySummaryStats.map((stat, index) => (
           <StatCard
             key={stat.title}
