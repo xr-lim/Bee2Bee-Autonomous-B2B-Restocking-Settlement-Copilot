@@ -32,7 +32,7 @@ Run:
 
 - npm run db:seed
 
-The seed script upserts each domain table by `id`.
+The seed script upserts each domain table by `id`, including the product stock/demand trend history used by inventory charts.
 
 `schema.sql` now removes the legacy UI-only demo tables before recreating the
 domain schema, so run it only against a database where replacing the old

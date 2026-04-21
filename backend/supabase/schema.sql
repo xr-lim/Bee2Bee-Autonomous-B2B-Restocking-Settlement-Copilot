@@ -18,6 +18,7 @@ drop table if exists public.conversation_messages cascade;
 drop table if exists public.conversation_products cascade;
 drop table if exists public.conversations cascade;
 drop table if exists public.threshold_change_requests cascade;
+drop table if exists public.product_stock_demand_trends cascade;
 drop table if exists public.product_suppliers cascade;
 drop table if exists public.products cascade;
 drop table if exists public.suppliers cascade;
@@ -68,6 +69,19 @@ create table public.products (
   primary_supplier_id text references public.suppliers(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table public.product_stock_demand_trends (
+  id text primary key,
+  product_id text not null references public.products(id) on delete cascade,
+  month_order integer not null check (month_order between 1 and 12),
+  month text not null,
+  stock integer not null check (stock >= 0),
+  demand integer not null check (demand >= 0),
+  promotion text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (product_id, month_order)
 );
 
 create table public.product_suppliers (
@@ -291,6 +305,10 @@ create trigger set_products_updated_at
 before update on public.products
 for each row execute function public.set_updated_at();
 
+create trigger set_product_stock_demand_trends_updated_at
+before update on public.product_stock_demand_trends
+for each row execute function public.set_updated_at();
+
 create trigger set_threshold_change_requests_updated_at
 before update on public.threshold_change_requests
 for each row execute function public.set_updated_at();
@@ -309,6 +327,8 @@ for each row execute function public.set_updated_at();
 
 create index idx_products_primary_supplier_id
   on public.products (primary_supplier_id);
+create index idx_product_stock_demand_trends_product_id
+  on public.product_stock_demand_trends (product_id);
 create index idx_product_suppliers_product_id
   on public.product_suppliers (product_id);
 create index idx_product_suppliers_supplier_id

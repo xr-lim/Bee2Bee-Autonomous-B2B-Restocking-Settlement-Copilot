@@ -153,6 +153,18 @@ type RawProductSupplier = {
   createdAt?: string
 }
 
+type RawProductStockDemandTrend = {
+  id: string
+  productId: string
+  monthOrder: number
+  month: string
+  stock: number
+  demand: number
+  promotion: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 type RawThresholdChangeRequest = {
   id: string
   productId: string
@@ -300,6 +312,7 @@ async function getDomainRows() {
   const [
     suppliers,
     products,
+    productStockDemandTrends,
     productSuppliers,
     thresholdRequests,
     conversations,
@@ -313,6 +326,7 @@ async function getDomainRows() {
   ] = await Promise.all([
     selectRows<RawSupplier>("suppliers"),
     selectRows<RawProduct>("products"),
+    selectRows<RawProductStockDemandTrend>("product_stock_demand_trends"),
     selectRows<RawProductSupplier>("product_suppliers"),
     selectRows<RawThresholdChangeRequest>("threshold_change_requests"),
     selectRows<RawConversation>("conversations"),
@@ -328,6 +342,7 @@ async function getDomainRows() {
   return {
     suppliers,
     products,
+    productStockDemandTrends,
     productSuppliers,
     thresholdRequests,
     conversations,
@@ -496,6 +511,90 @@ function derivedTrend(product: RawProduct) {
   if (product.status === "near_threshold") return -6
   if (product.status === "batch_candidate") return 9
   return -2
+}
+
+function buildFallbackStockDemandTrendMap(
+  products: Product[]
+): ProductStockDemandTrendMap {
+  return Object.fromEntries(
+    products.map((product) => [
+      product.sku,
+      [
+        {
+          month: "May",
+          stock: Math.round(product.stockOnHand * 1.6),
+          demand: Math.max(0, Math.round(product.monthlyVelocity * 0.95)),
+          promotion: "",
+        },
+        {
+          month: "Jun",
+          stock: Math.round(product.stockOnHand * 1.4),
+          demand: Math.round(product.monthlyVelocity * 1.05),
+          promotion: "Payday Sale",
+        },
+        {
+          month: "Jul",
+          stock: Math.round(product.stockOnHand * 1.2),
+          demand: Math.max(0, Math.round(product.monthlyVelocity * 0.93)),
+          promotion: "",
+        },
+        {
+          month: "Aug",
+          stock: Math.round(product.stockOnHand * 1.1),
+          demand: Math.round(product.monthlyVelocity * 0.97),
+          promotion: "",
+        },
+        {
+          month: "Sep",
+          stock: Math.round(product.stockOnHand * 0.95),
+          demand: Math.round(product.monthlyVelocity * 1.0),
+          promotion: "Payday Sale",
+        },
+        {
+          month: "Oct",
+          stock: Math.round(product.stockOnHand * 0.85),
+          demand: Math.round(product.monthlyVelocity * 1.02),
+          promotion: "",
+        },
+        {
+          month: "Nov",
+          stock: Math.round(product.stockOnHand * 0.7),
+          demand: Math.round(product.monthlyVelocity * 1.3),
+          promotion: "11.11",
+        },
+        {
+          month: "Dec",
+          stock: Math.round(product.stockOnHand * 1.05),
+          demand: Math.round(product.monthlyVelocity * 1.08),
+          promotion: "Holiday",
+        },
+        {
+          month: "Jan",
+          stock: Math.round(product.stockOnHand * 0.9),
+          demand: Math.round(product.monthlyVelocity * 0.96),
+          promotion: "",
+        },
+        {
+          month: "Feb",
+          stock: Math.round(product.stockOnHand * 0.82),
+          demand: Math.round(product.monthlyVelocity * 0.99),
+          promotion: "Payday Sale",
+        },
+        {
+          month: "Mar",
+          stock: Math.round(product.stockOnHand * 0.7),
+          demand: Math.round(product.monthlyVelocity * 1.1),
+          promotion: "Raya",
+        },
+        {
+          month: "Apr",
+          stock: product.stockOnHand,
+          demand: product.monthlyVelocity,
+          promotion: "",
+        },
+      ],
+    ])
+  )
 }
 
 function mapSuppliers(suppliers: RawSupplier[]): Supplier[] {
@@ -1087,19 +1186,42 @@ export async function getSupplierExposureData(): Promise<SupplierExposureItem[]>
 export async function getProductStockDemandTrendBySku(): Promise<
   ProductStockDemandTrendMap
 > {
-  const products = await getProducts()
+  const rows = await getDomainRows()
+  const trendsByProductId = new Map<string, RawProductStockDemandTrend[]>()
 
-  return Object.fromEntries(
-    products.map((product) => [
+  rows.productStockDemandTrends.forEach((trend) => {
+    const existing = trendsByProductId.get(trend.productId) ?? []
+    existing.push(trend)
+    trendsByProductId.set(trend.productId, existing)
+  })
+
+  const trendMap = Object.fromEntries(
+    rows.products.map((product) => [
       product.sku,
-      [
-        { month: "Jan", stock: Math.round(product.stockOnHand * 1.6), demand: product.monthlyVelocity, promotion: "" },
-        { month: "Feb", stock: Math.round(product.stockOnHand * 1.4), demand: Math.round(product.monthlyVelocity * 1.05), promotion: "Payday Sale" },
-        { month: "Mar", stock: Math.round(product.stockOnHand * 1.2), demand: Math.round(product.monthlyVelocity * 1.15), promotion: "Raya" },
-        { month: "Apr", stock: product.stockOnHand, demand: product.monthlyVelocity, promotion: "" },
-      ],
+      (trendsByProductId.get(product.id) ?? [])
+        .slice()
+        .sort((first, second) => first.monthOrder - second.monthOrder)
+        .map((trend) => ({
+          month: trend.month,
+          stock: trend.stock,
+          demand: trend.demand,
+          promotion: trend.promotion,
+        })),
     ])
   )
+
+  const fallbackTrendMap = buildFallbackStockDemandTrendMap(mapProducts(rows))
+
+  if (Object.keys(trendMap).length > 0) {
+    return Object.fromEntries(
+      Object.entries(fallbackTrendMap).map(([sku, fallbackTrend]) => [
+        sku,
+        trendMap[sku]?.length ? trendMap[sku] : fallbackTrend,
+      ])
+    )
+  }
+
+  return fallbackTrendMap
 }
 
 export async function getProductMonthlySummaryBySku(): Promise<

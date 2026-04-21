@@ -16,6 +16,7 @@ const __dirname = path.dirname(__filename)
 const TABLE_CONFIG = [
   { name: "suppliers", conflictKey: "id", jsonbCols: [] },
   { name: "products", conflictKey: "id", jsonbCols: [] },
+  { name: "product_stock_demand_trends", conflictKey: "id", jsonbCols: [] },
   { name: "product_suppliers", conflictKey: "id", jsonbCols: [] },
   { name: "threshold_change_requests", conflictKey: "id", jsonbCols: [] },
   { name: "conversations", conflictKey: "id", jsonbCols: [] },
