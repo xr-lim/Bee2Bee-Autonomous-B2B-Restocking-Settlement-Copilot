@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { displayConversationSource } from "@/lib/conversation-source"
 import {
   getConversations,
   getInvoices,
@@ -251,7 +252,10 @@ export default async function ConversationsPage() {
                         .join(", ")}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge label={conversation.source} tone="ai" />
+                      <StatusBadge
+                        label={displayConversationSource(conversation.source)}
+                        tone="ai"
+                      />
                     </TableCell>
                     <TableCell className="max-w-[300px] whitespace-normal text-[15px] leading-5 text-[#9CA3AF]">
                       {conversation.latestMessage}

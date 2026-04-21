@@ -22,6 +22,7 @@ import { useCallback, useMemo, useState } from "react"
 
 import { AiReasoningTrail } from "@/components/shared/ai-reasoning-trail"
 import { StatusBadge } from "@/components/shared/status-badge"
+import { displayConversationSource } from "@/lib/conversation-source"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -187,7 +188,10 @@ export function ConversationWorkspace({
                 label="Supplier"
                 value={supplier?.name ?? "Unknown supplier"}
               />
-              <InfoRow label="Source Type" value={conversation.source} />
+              <InfoRow
+                label="Source Type"
+                value={displayConversationSource(conversation.source)}
+              />
               <InfoRow
                 label="Target Price Range"
                 value={conversation.targetPriceRange}

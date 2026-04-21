@@ -133,11 +133,9 @@ export type NegotiationMessage = {
 
 export type ConversationSource =
   | "Email"
-  | "Chat App"
-  | "Upload"
-  | "PDF"
-  | "Image"
-  | "Voice Note"
+  | "WhatsApp"
+  | "Telegram"
+  | "WeChat"
 
 export type NegotiationState =
   | "New Input"

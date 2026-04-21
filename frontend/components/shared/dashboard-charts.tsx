@@ -117,9 +117,11 @@ function getServerSnapshot() {
 export function DashboardCharts({
   monthlyDemandData,
   stockTrendData,
+  hideMonthlyDemand = false,
 }: {
   monthlyDemandData: MonthlyDemandPoint[]
   stockTrendData: StockTrendPoint[]
+  hideMonthlyDemand?: boolean
 }) {
   const mounted = useSyncExternalStore(
     subscribeToClientStore,
@@ -127,7 +129,7 @@ export function DashboardCharts({
     getServerSnapshot
   )
 
-  if (stockTrendData.length === 0 || monthlyDemandData.length === 0) {
+  if (stockTrendData.length === 0 || (!hideMonthlyDemand && monthlyDemandData.length === 0)) {
     return (
       <section className="grid gap-6">
         <ChartCard
@@ -136,12 +138,14 @@ export function DashboardCharts({
         >
           <ChartPlaceholder />
         </ChartCard>
-        <ChartCard
-          title="Monthly Demand Analytics"
-          description="Demand pattern with promotion months highlighted for planning."
-        >
-          <ChartPlaceholder />
-        </ChartCard>
+        {!hideMonthlyDemand ? (
+          <ChartCard
+            title="Monthly Demand Analytics"
+            description="Demand pattern with promotion months highlighted for planning."
+          >
+            <ChartPlaceholder />
+          </ChartCard>
+        ) : null}
       </section>
     )
   }
@@ -168,14 +172,18 @@ export function DashboardCharts({
     },
   ]
 
-  const totalDemand = monthlyDemandData.reduce(
-    (total, item) => total + item.demand,
-    0
-  )
-  const peakDemand = monthlyDemandData.reduce((peak, item) =>
-    item.demand > peak.demand ? item : peak
-  )
-  const promoMonths = monthlyDemandData.filter((item) => item.promo !== "Baseline")
+  const totalDemand = hideMonthlyDemand
+    ? 0
+    : monthlyDemandData.reduce((total, item) => total + item.demand, 0)
+  const peakDemand =
+    hideMonthlyDemand || monthlyDemandData.length === 0
+      ? null
+      : monthlyDemandData.reduce((peak, item) =>
+          item.demand > peak.demand ? item : peak
+        )
+  const promoMonths = hideMonthlyDemand
+    ? []
+    : monthlyDemandData.filter((item) => item.promo !== "Baseline")
 
   if (!mounted) {
     return (
@@ -186,12 +194,14 @@ export function DashboardCharts({
         >
           <ChartPlaceholder />
         </ChartCard>
-        <ChartCard
-          title="Monthly Demand Analytics"
-          description="Demand pattern with promotion months highlighted for planning."
-        >
-          <ChartPlaceholder />
-        </ChartCard>
+        {!hideMonthlyDemand ? (
+          <ChartCard
+            title="Monthly Demand Analytics"
+            description="Demand pattern with promotion months highlighted for planning."
+          >
+            <ChartPlaceholder />
+          </ChartCard>
+        ) : null}
       </section>
     )
   }
@@ -304,6 +314,7 @@ export function DashboardCharts({
         </ResponsiveContainer>
       </ChartCard>
 
+      {!hideMonthlyDemand && peakDemand ? (
       <ChartCard
         title="Monthly Demand Analytics"
         description="Monthly demand with campaign periods highlighted for replenishment timing."
@@ -359,6 +370,7 @@ export function DashboardCharts({
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
+      ) : null}
     </section>
   )
 }

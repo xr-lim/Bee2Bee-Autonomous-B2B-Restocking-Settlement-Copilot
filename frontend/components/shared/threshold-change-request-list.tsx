@@ -8,6 +8,7 @@ import {
   Bot,
   Check,
   ChevronDown,
+  ChevronRight,
   X,
 } from "lucide-react"
 import { useState } from "react"
@@ -29,6 +30,7 @@ type ThresholdChangeRequestListProps = {
   emptyLabel?: string
   defaultOpen?: boolean
   collapsible?: boolean
+  variant?: "review" | "preview"
 }
 
 type LocalStatus = ThresholdChangeRequest["status"]
@@ -58,7 +60,9 @@ export function ThresholdChangeRequestList({
   emptyLabel = "No pending threshold changes.",
   defaultOpen = false,
   collapsible = true,
+  variant = "review",
 }: ThresholdChangeRequestListProps) {
+  const isPreview = variant === "preview"
   const productLookup = new Map(
     (products ?? []).map((product) => [product.sku, product])
   )
@@ -140,14 +144,21 @@ export function ThresholdChangeRequestList({
             <div className="p-5 text-[14px] text-[#6B7280]">{emptyLabel}</div>
           ) : (
             <ul className="divide-y divide-[#243047]">
-              {visibleRequests.map((request) => (
-                <ThresholdRow
-                  key={request.id}
-                  request={request}
-                  product={productLookup.get(request.productSku)}
-                  onDecision={handleDecision}
-                />
-              ))}
+              {visibleRequests.map((request) =>
+                isPreview ? (
+                  <ThresholdPreviewRow
+                    key={request.id}
+                    request={request}
+                  />
+                ) : (
+                  <ThresholdRow
+                    key={request.id}
+                    request={request}
+                    product={productLookup.get(request.productSku)}
+                    onDecision={handleDecision}
+                  />
+                )
+              )}
             </ul>
           )}
           {hiddenCount > 0 ? (
@@ -346,6 +357,69 @@ function ThresholdRow({
         decision={reasoning.decision}
         density="compact"
       />
+    </li>
+  )
+}
+
+function ThresholdPreviewRow({
+  request,
+}: {
+  request: ThresholdChangeRequest
+}) {
+  const positive = request.changePercent >= 0
+  const DeltaIcon = positive ? ArrowUpRight : ArrowDownRight
+
+  return (
+    <li className="grid grid-cols-[1.4fr_1fr_auto] items-center gap-4 px-4 py-3.5">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/inventory/${request.productSku}`}
+            className="truncate text-[15px] font-semibold text-[#E5E7EB] hover:text-[#93C5FD]"
+          >
+            {request.productName}
+          </Link>
+          <StatusBadge
+            label={triggerLabel[request.trigger]}
+            tone={triggerTone[request.trigger]}
+          />
+        </div>
+        <p className="mt-0.5 font-mono text-[12px] text-[#6B7280]">
+          {request.productSku}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 text-[14px] text-[#9CA3AF]">
+          <span>{request.currentThreshold}</span>
+          <ArrowRight className="size-3 text-[#6B7280]" aria-hidden="true" />
+          <span className="font-semibold text-[#E5E7EB]">
+            {request.proposedThreshold}
+          </span>
+        </div>
+        <div
+          className={
+            positive
+              ? "flex items-center gap-0.5 text-[12px] text-[#F59E0B]"
+              : "flex items-center gap-0.5 text-[12px] text-[#10B981]"
+          }
+        >
+          <DeltaIcon className="size-3" aria-hidden="true" />
+          {positive ? "+" : ""}
+          {request.changePercent}%
+        </div>
+      </div>
+
+      <Button
+        asChild
+        variant="outline"
+        className="h-9 rounded-[10px] border-[#243047] bg-[#172033] px-3 text-[13px] text-[#E5E7EB] hover:bg-[#243047]"
+      >
+        <Link href={`/inventory/${request.productSku}`}>
+          Review
+          <ChevronRight className="size-4" aria-hidden="true" />
+        </Link>
+      </Button>
     </li>
   )
 }
