@@ -11,13 +11,15 @@ import {
   ChevronRight,
   X,
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 
 import { AiReasoningTrail } from "@/components/shared/ai-reasoning-trail"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { buildThresholdReasoning } from "@/lib/ai-reasoning"
+import { decideThresholdRequestAction } from "@/lib/actions"
 import type { Product, StatusTone, ThresholdChangeRequest } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -62,12 +64,15 @@ export function ThresholdChangeRequestList({
   collapsible = true,
   variant = "review",
 }: ThresholdChangeRequestListProps) {
+  const router = useRouter()
   const isPreview = variant === "preview"
   const productLookup = new Map(
     (products ?? []).map((product) => [product.sku, product])
   )
   const [statusMap, setStatusMap] = useState<Record<string, LocalStatus>>({})
   const [open, setOpen] = useState(defaultOpen || !collapsible)
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
 
   const pendingRequests = requests.filter(
     (request) => (statusMap[request.id] ?? request.status) === "pending"
@@ -79,7 +84,23 @@ export function ThresholdChangeRequestList({
   const hiddenCount = pendingRequests.length - visibleRequests.length
 
   function handleDecision(id: string, decision: LocalStatus) {
-    setStatusMap((current) => ({ ...current, [id]: decision }))
+    const request = requests.find((item) => item.id === id)
+    if (!request || decision === "pending") return
+    setError(null)
+    startTransition(async () => {
+      const result = await decideThresholdRequestAction({
+        requestId: id,
+        decision,
+        proposedThreshold: request.proposedThreshold,
+        reason: request.reason,
+      })
+      if (!result.ok) {
+        setError(result.message ?? "Could not save threshold decision.")
+        return
+      }
+      setStatusMap((current) => ({ ...current, [id]: decision }))
+      router.refresh()
+    })
   }
 
   const expanded = collapsible ? open : true
@@ -140,6 +161,11 @@ export function ThresholdChangeRequestList({
 
       {expanded ? (
         <CardContent className="border-t border-[#243047] p-0">
+          {error ? (
+            <div className="border-b border-[#EF4444]/30 bg-[#EF4444]/10 px-4 py-2.5 text-[13px] text-[#FCA5A5]">
+              {error}
+            </div>
+          ) : null}
           {visibleRequests.length === 0 ? (
             <div className="p-5 text-[14px] text-[#6B7280]">{emptyLabel}</div>
           ) : (
@@ -156,6 +182,7 @@ export function ThresholdChangeRequestList({
                     request={request}
                     product={productLookup.get(request.productSku)}
                     onDecision={handleDecision}
+                    pending={isPending}
                   />
                 )
               )}
@@ -180,10 +207,31 @@ export function ThresholdChangeBanner({
   request: ThresholdChangeRequest
   product?: Product
 }) {
+  const router = useRouter()
   const [decision, setDecision] = useState<LocalStatus>(request.status)
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
   const positive = request.changePercent >= 0
   const DeltaIcon = positive ? ArrowUpRight : ArrowDownRight
   const reasoning = buildThresholdReasoning(request, product)
+
+  function handleDecision(nextDecision: Exclude<LocalStatus, "pending">) {
+    setError(null)
+    startTransition(async () => {
+      const result = await decideThresholdRequestAction({
+        requestId: request.id,
+        decision: nextDecision,
+        proposedThreshold: request.proposedThreshold,
+        reason: request.reason,
+      })
+      if (!result.ok) {
+        setError(result.message ?? "Could not save threshold decision.")
+        return
+      }
+      setDecision(nextDecision)
+      router.refresh()
+    })
+  }
 
   return (
     <Card className="rounded-[14px] border border-[#8B5CF6]/35 bg-[#8B5CF6]/5 py-0 shadow-none ring-0">
@@ -241,7 +289,8 @@ export function ThresholdChangeBanner({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setDecision("rejected")}
+                disabled={isPending}
+                onClick={() => handleDecision("rejected")}
                 className="h-9 rounded-[10px] border-[#243047] bg-[#172033] px-3 text-[#E5E7EB] hover:bg-[#243047]"
               >
                 <X className="size-4" aria-hidden="true" />
@@ -249,7 +298,8 @@ export function ThresholdChangeBanner({
               </Button>
               <Button
                 type="button"
-                onClick={() => setDecision("approved")}
+                disabled={isPending}
+                onClick={() => handleDecision("approved")}
                 className="h-9 rounded-[10px] bg-[#3B82F6] px-3 text-white hover:bg-[#2563EB]"
               >
                 <Check className="size-4" aria-hidden="true" />
@@ -258,6 +308,7 @@ export function ThresholdChangeBanner({
             </div>
           ) : null}
         </div>
+        {error ? <p className="text-[13px] text-[#FCA5A5]">{error}</p> : null}
         <AiReasoningTrail
           id={`threshold-banner-${request.id}`}
           signals={reasoning.signals}
@@ -273,10 +324,12 @@ function ThresholdRow({
   request,
   product,
   onDecision,
+  pending,
 }: {
   request: ThresholdChangeRequest
   product?: Product
   onDecision: (id: string, decision: LocalStatus) => void
+  pending?: boolean
 }) {
   const positive = request.changePercent >= 0
   const DeltaIcon = positive ? ArrowUpRight : ArrowDownRight
@@ -334,6 +387,7 @@ function ThresholdRow({
           <Button
             type="button"
             variant="outline"
+            disabled={pending}
             onClick={() => onDecision(request.id, "rejected")}
             className="h-9 rounded-[10px] border-[#243047] bg-[#172033] px-3.5 text-[14px] text-[#E5E7EB] hover:bg-[#243047]"
           >
@@ -342,6 +396,7 @@ function ThresholdRow({
           </Button>
           <Button
             type="button"
+            disabled={pending}
             onClick={() => onDecision(request.id, "approved")}
             className="h-9 rounded-[10px] bg-[#3B82F6] px-3.5 text-[14px] text-white hover:bg-[#2563EB]"
           >

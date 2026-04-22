@@ -9,7 +9,8 @@ import {
   Square,
   Truck,
 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "motion/react"
 
 import { StatusBadge } from "@/components/shared/status-badge"
@@ -28,6 +29,10 @@ import {
 import { Input } from "@/components/ui/input"
 import type { Product, StatusTone, Supplier } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import {
+  createSupplierAction,
+  setSupplierAssignmentAction,
+} from "@/lib/actions"
 
 type SuppliersManagerProps = {
   initialSuppliers: Supplier[]
@@ -35,6 +40,12 @@ type SuppliersManagerProps = {
 }
 
 type SupplierAssignments = Record<string, Set<string>>
+type SupplierPayload = {
+  name: string
+  region: string
+  leadTimeDays: number
+  reliabilityScore: number
+}
 
 const statusTone: Record<Supplier["status"], StatusTone> = {
   preferred: "success",
@@ -74,30 +85,40 @@ export function SuppliersManager({
   initialSuppliers,
   products,
 }: SuppliersManagerProps) {
-  const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers)
+  const router = useRouter()
+  const suppliers = initialSuppliers
   const [assignments, setAssignments] = useState<SupplierAssignments>(() =>
     buildInitialAssignments(initialSuppliers, products)
   )
   const [query, setQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
   const [expanded, setExpanded] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
 
   const filteredSuppliers = useMemo(() => {
     const keyword = query.trim().toLowerCase()
     if (!keyword) return suppliers
     return suppliers.filter(
       (supplier) =>
-        supplier.name.toLowerCase().includes(keyword) ||
-        supplier.region.toLowerCase().includes(keyword) ||
-        supplier.id.toLowerCase().includes(keyword)
+        (statusFilter === "all" || supplier.status === statusFilter) &&
+        (!keyword ||
+          supplier.name.toLowerCase().includes(keyword) ||
+          supplier.region.toLowerCase().includes(keyword) ||
+          supplier.id.toLowerCase().includes(keyword) ||
+          statusLabel[supplier.status].toLowerCase().includes(keyword))
     )
-  }, [query, suppliers])
+  }, [query, statusFilter, suppliers])
 
   function toggleAssignment(supplierId: string, sku: string) {
+    const wasAssigned = assignments[supplierId]?.has(sku) ?? false
+    const assigned = !wasAssigned
+    setError(null)
     setAssignments((current) => {
       const next = { ...current }
       const set = new Set(current[supplierId] ?? [])
-      if (set.has(sku)) {
+      if (wasAssigned) {
         set.delete(sku)
       } else {
         set.add(sku)
@@ -105,15 +126,43 @@ export function SuppliersManager({
       next[supplierId] = set
       return next
     })
+
+    startTransition(async () => {
+      const result = await setSupplierAssignmentAction({
+        supplierId,
+        sku,
+        assigned,
+      })
+      if (!result.ok) {
+        setError(result.message ?? "Could not update supplier assignment.")
+        setAssignments((current) => {
+          const next = { ...current }
+          const set = new Set(current[supplierId] ?? [])
+          if (wasAssigned) {
+            set.add(sku)
+          } else {
+            set.delete(sku)
+          }
+          next[supplierId] = set
+          return next
+        })
+        return
+      }
+      router.refresh()
+    })
   }
 
-  function handleAddSupplier(supplier: Supplier) {
-    setSuppliers((current) => [supplier, ...current])
-    setAssignments((current) => ({
-      ...current,
-      [supplier.id]: new Set<string>(),
-    }))
-    setDialogOpen(false)
+  function handleAddSupplier(supplier: SupplierPayload) {
+    setError(null)
+    startTransition(async () => {
+      const result = await createSupplierAction(supplier)
+      if (!result.ok) {
+        setError(result.message ?? "Could not save supplier.")
+        return
+      }
+      setDialogOpen(false)
+      router.refresh()
+    })
   }
 
   return (
@@ -146,6 +195,25 @@ export function SuppliersManager({
               className="h-10 w-[240px] rounded-[10px] border-[#243047] bg-[#0B1220] pl-9 text-[14px] text-[#E5E7EB] placeholder:text-[#6B7280]"
             />
           </div>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="h-10 rounded-[10px] border border-[#243047] bg-[#0B1220] px-3 text-[14px] text-[#E5E7EB] outline-none"
+            aria-label="Filter suppliers by status"
+          >
+            <option value="all" className="bg-[#111827] text-[#E5E7EB]">
+              All statuses
+            </option>
+            <option value="preferred" className="bg-[#111827] text-[#E5E7EB]">
+              Preferred
+            </option>
+            <option value="watchlist" className="bg-[#111827] text-[#E5E7EB]">
+              Watchlist
+            </option>
+            <option value="inactive" className="bg-[#111827] text-[#E5E7EB]">
+              Inactive
+            </option>
+          </select>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button
@@ -156,12 +224,21 @@ export function SuppliersManager({
                 Add supplier
               </Button>
             </DialogTrigger>
-            <AddSupplierDialog onSubmit={handleAddSupplier} />
+            <AddSupplierDialog
+              onSubmit={handleAddSupplier}
+              pending={isPending}
+              actionError={error}
+            />
           </Dialog>
         </div>
       </CardHeader>
 
       <CardContent className="p-0">
+        {error ? (
+          <div className="border-b border-[#EF4444]/30 bg-[#EF4444]/10 px-5 py-3 text-[13px] text-[#FCA5A5]">
+            {error}
+          </div>
+        ) : null}
         <div className="grid grid-cols-[1.6fr_1fr_0.8fr_0.8fr_0.8fr_auto] items-center gap-3 border-b border-[#243047] px-5 py-2.5 text-[12px] font-medium uppercase tracking-wider text-[#6B7280]">
           <span>Supplier</span>
           <span>Region</span>
@@ -311,10 +388,16 @@ export function SuppliersManager({
 }
 
 type AddSupplierDialogProps = {
-  onSubmit: (supplier: Supplier) => void
+  onSubmit: (supplier: SupplierPayload) => void
+  pending?: boolean
+  actionError?: string | null
 }
 
-function AddSupplierDialog({ onSubmit }: AddSupplierDialogProps) {
+function AddSupplierDialog({
+  onSubmit,
+  pending = false,
+  actionError,
+}: AddSupplierDialogProps) {
   const [name, setName] = useState("")
   const [region, setRegion] = useState("")
   const [leadTime, setLeadTime] = useState("")
@@ -335,21 +418,13 @@ function AddSupplierDialog({ onSubmit }: AddSupplierDialogProps) {
       return
     }
 
+    setError(null)
     onSubmit({
-      id: `sup-new-${Date.now()}`,
       name: name.trim(),
       region: region.trim(),
       leadTimeDays: leadNumber,
       reliabilityScore: reliabilityNumber,
-      status,
     })
-
-    setName("")
-    setRegion("")
-    setLeadTime("")
-    setReliability("")
-    setStatus("watchlist")
-    setError(null)
   }
 
   return (
@@ -418,8 +493,8 @@ function AddSupplierDialog({ onSubmit }: AddSupplierDialogProps) {
           </Field>
         </div>
 
-        {error ? (
-          <p className="text-[12px] text-[#F87171]">{error}</p>
+        {error || actionError ? (
+          <p className="text-[12px] text-[#F87171]">{error ?? actionError}</p>
         ) : null}
 
         <DialogFooter>
@@ -434,9 +509,10 @@ function AddSupplierDialog({ onSubmit }: AddSupplierDialogProps) {
           </DialogClose>
           <Button
             type="submit"
+            disabled={pending}
             className="h-9 rounded-[10px] bg-[#3B82F6] px-3 text-white hover:bg-[#2563EB]"
           >
-            Save supplier
+            {pending ? "Saving..." : "Save supplier"}
           </Button>
         </DialogFooter>
       </form>

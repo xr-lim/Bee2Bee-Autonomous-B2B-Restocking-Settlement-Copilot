@@ -12,7 +12,8 @@ import {
   X,
 } from "lucide-react"
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useMemo, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "motion/react"
 
 import { StatusBadge } from "@/components/shared/status-badge"
@@ -21,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import type { Product, StatusTone, Supplier } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { updateProductAction } from "@/lib/actions"
 
 type ProductDetailsEditorProps = {
   product: Product
@@ -51,12 +53,15 @@ export function ProductDetailsEditor({
   stockStatus,
   leadTimeDays,
 }: ProductDetailsEditorProps) {
+  const router = useRouter()
   const supplierLookup = useMemo(
     () => new Map(suppliers.map((supplier) => [supplier.id, supplier])),
     [suppliers]
   )
 
   const [isEditing, setIsEditing] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
   const [committed, setCommitted] = useState<DraftState>(() => ({
     stockOnHand: product.stockOnHand,
     unitCost: product.unitCost,
@@ -101,10 +106,30 @@ export function ProductDetailsEditor({
   }
 
   function handleSave() {
-    setCommitted(draft)
-    setIsEditing(false)
-    setSupplierOpen(false)
-    setShowAllSuppliers(false)
+    setError(null)
+    startTransition(async () => {
+      const result = await updateProductAction({
+        productId: product.id,
+        sku: product.sku,
+        stockOnHand: draft.stockOnHand,
+        unitCost: draft.unitCost,
+        staticThreshold: product.staticThreshold,
+        aiThreshold: draft.aiThreshold,
+        supplierId: draft.supplierId,
+        trackedSupplierIds: draft.trackedSupplierIds,
+      })
+
+      if (!result.ok) {
+        setError(result.message ?? "Could not update product.")
+        return
+      }
+
+      setCommitted(draft)
+      setIsEditing(false)
+      setSupplierOpen(false)
+      setShowAllSuppliers(false)
+      router.refresh()
+    })
   }
 
   function handleSwitchSupplier(supplierId: string) {
@@ -159,8 +184,7 @@ export function ProductDetailsEditor({
               ) : null}
             </div>
             <p className="mt-1 text-[13px] leading-5 text-[#9CA3AF]">
-              Edit stock, unit price, and supplier. Changes stay local to this
-              session.
+              Edit stock, unit price, AI threshold, and supplier links.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -178,10 +202,11 @@ export function ProductDetailsEditor({
                 <Button
                   type="button"
                   onClick={handleSave}
+                  disabled={isPending}
                   className="h-9 rounded-[10px] bg-[#3B82F6] px-3 text-white hover:bg-[#2563EB]"
                 >
                   <Save className="size-4" aria-hidden="true" />
-                  Save changes
+                  {isPending ? "Saving..." : "Save changes"}
                 </Button>
               </>
             ) : (
@@ -200,6 +225,11 @@ export function ProductDetailsEditor({
       </CardHeader>
 
       <CardContent className="space-y-5 p-5">
+        {error ? (
+          <p className="rounded-[10px] border border-[#EF4444]/30 bg-[#EF4444]/10 px-3 py-2 text-[13px] text-[#FCA5A5]">
+            {error}
+          </p>
+        ) : null}
         <div className="grid grid-cols-2 gap-3">
           <FieldBlock label="SKU">
             <FieldValue>{product.sku}</FieldValue>

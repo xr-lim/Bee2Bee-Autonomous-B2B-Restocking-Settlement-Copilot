@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 
 import { PageHeader } from "@/components/layout/page-header"
 import { AiReasoningTrail } from "@/components/shared/ai-reasoning-trail"
+import { InvoiceDecisionActions } from "@/components/shared/invoice-decision-actions"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -344,32 +345,10 @@ export default async function InvoiceDetailPage({
               {invoice.amount.toLocaleString("en-US")}.
             </p>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              disabled={isCompleted}
-              className="h-11 rounded-[10px] bg-[#10B981] px-5 text-white hover:bg-[#059669] disabled:cursor-not-allowed disabled:bg-[#172033] disabled:text-[#6B7280]"
-            >
-              Approve
-            </Button>
-            <Button
-              disabled={isCompleted}
-              className="h-11 rounded-[10px] bg-[#F59E0B] px-5 text-[#111827] hover:bg-[#D97706] disabled:cursor-not-allowed disabled:bg-[#172033] disabled:text-[#6B7280]"
-            >
-              Hold Review
-            </Button>
-            <Button
-              disabled={isCompleted}
-              className="h-11 rounded-[10px] bg-[#EF4444] px-5 text-white hover:bg-[#DC2626] disabled:cursor-not-allowed disabled:bg-[#172033] disabled:text-[#6B7280]"
-            >
-              Reject / Block
-            </Button>
-            <Button
-              disabled={isCompleted}
-              className="h-11 rounded-[10px] border border-[#243047] bg-[#111827] px-5 text-[#E5E7EB] hover:bg-[#243047] disabled:cursor-not-allowed disabled:text-[#6B7280]"
-            >
-              {isCompleted ? "Already Completed" : "Mark Completed"}
-            </Button>
-          </div>
+          <InvoiceDecisionActions
+            invoiceId={invoice.id}
+            isCompleted={isCompleted}
+          />
         </div>
       </section>
     </>

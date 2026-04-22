@@ -10,7 +10,8 @@ import {
   Save,
   X,
 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 
 import { AiReasoningTrail } from "@/components/shared/ai-reasoning-trail"
 import { StatusBadge } from "@/components/shared/status-badge"
@@ -19,6 +20,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { buildThresholdReasoning } from "@/lib/ai-reasoning"
+import {
+  decideThresholdRequestAction,
+  updateThresholdRequestAction,
+} from "@/lib/actions"
 import type {
   Product,
   StatusTone,
@@ -50,12 +55,15 @@ export function ThresholdChangeReviewPanel({
   request: ThresholdChangeRequest
   product?: Product
 }) {
+  const router = useRouter()
   const reasoning = useMemo(
     () => buildThresholdReasoning(request, product),
     [request, product]
   )
 
   const [isEditing, setIsEditing] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
   const [committed, setCommitted] = useState({
     proposedThreshold: request.proposedThreshold,
     reason: request.reason,
@@ -86,8 +94,43 @@ export function ThresholdChangeReviewPanel({
   }
 
   function handleSave() {
-    setCommitted(draft)
-    setIsEditing(false)
+    setError(null)
+    startTransition(async () => {
+      const result = await updateThresholdRequestAction({
+        requestId: request.id,
+        proposedThreshold: draft.proposedThreshold,
+        reason: draft.reason,
+      })
+
+      if (!result.ok) {
+        setError(result.message ?? "Could not update threshold request.")
+        return
+      }
+
+      setCommitted(draft)
+      setIsEditing(false)
+      router.refresh()
+    })
+  }
+
+  function handleDecision(nextDecision: Exclude<Decision, "pending">) {
+    setError(null)
+    startTransition(async () => {
+      const result = await decideThresholdRequestAction({
+        requestId: request.id,
+        decision: nextDecision,
+        proposedThreshold: state.proposedThreshold,
+        reason: state.reason,
+      })
+
+      if (!result.ok) {
+        setError(result.message ?? "Could not save threshold decision.")
+        return
+      }
+
+      setDecision(nextDecision)
+      router.refresh()
+    })
   }
 
   const showActions = decision === "pending"
@@ -148,10 +191,11 @@ export function ThresholdChangeReviewPanel({
                 <Button
                   type="button"
                   onClick={handleSave}
+                  disabled={isPending}
                   className="h-9 rounded-[10px] bg-[#3B82F6] px-3 text-white hover:bg-[#2563EB]"
                 >
                   <Save className="size-4" aria-hidden="true" />
-                  Save
+                  {isPending ? "Saving..." : "Save"}
                 </Button>
               </>
             ) : null}
@@ -246,34 +290,34 @@ export function ThresholdChangeReviewPanel({
 
         {showActions ? (
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#243047] pt-4">
+            {error ? (
+              <p className="mr-auto text-[13px] text-[#FCA5A5]">{error}</p>
+            ) : null}
             <Button
               type="button"
               variant="outline"
-              onClick={() => setDecision("rejected")}
+              disabled={isPending}
+              onClick={() => handleDecision("rejected")}
               className="h-10 rounded-[10px] border-[#243047] bg-[#172033] px-4 text-[#E5E7EB] hover:bg-[#243047]"
             >
               <X className="size-4" aria-hidden="true" />
-              Keep current threshold
+              {isPending ? "Saving..." : "Keep current threshold"}
             </Button>
             <Button
               type="button"
-              onClick={() => setDecision("approved")}
+              disabled={isPending}
+              onClick={() => handleDecision("approved")}
               className="h-10 rounded-[10px] bg-[#3B82F6] px-4 text-white hover:bg-[#2563EB]"
             >
               <Check className="size-4" aria-hidden="true" />
-              Confirm new threshold
+              {isPending ? "Saving..." : "Confirm new threshold"}
             </Button>
           </div>
         ) : (
-          <div className="flex items-center justify-end gap-2 border-t border-[#243047] pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDecision("pending")}
-              className="h-9 rounded-[10px] border-[#243047] bg-[#172033] px-3 text-[#E5E7EB] hover:bg-[#243047]"
-            >
-              Reopen review
-            </Button>
+          <div className="flex items-center justify-end border-t border-[#243047] pt-4">
+            <p className="text-[13px] text-[#9CA3AF]">
+              Decision saved. The request will disappear after refresh.
+            </p>
           </div>
         )}
       </CardContent>
