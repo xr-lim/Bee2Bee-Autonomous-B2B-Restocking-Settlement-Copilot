@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Bot, CircleStop, PackagePlus } from "lucide-react"
+import { Bot, EyeOff, PackagePlus } from "lucide-react"
 
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
@@ -9,11 +9,13 @@ import type { RestockRecommendation } from "@/lib/types"
 type RestockOrderCardProps = {
   recommendation: RestockRecommendation
   compact?: boolean
+  onDismiss?: (id: string) => void
 }
 
 export function RestockOrderCard({
   recommendation,
   compact = false,
+  onDismiss,
 }: RestockOrderCardProps) {
   return (
     <Card className="rounded-[14px] border border-[#8B5CF6]/35 bg-[#111827] py-0 shadow-none ring-0">
@@ -74,10 +76,11 @@ export function RestockOrderCard({
             <Button
               type="button"
               variant="outline"
+              onClick={() => onDismiss?.(recommendation.id)}
               className="h-9 rounded-[10px] border-[#EF4444]/35 bg-[#EF4444]/10 px-3 text-[#FCA5A5] hover:bg-[#EF4444]/20"
             >
-              <CircleStop className="size-4" aria-hidden="true" />
-              Interrupt
+              <EyeOff className="size-4" aria-hidden="true" />
+              Dismiss
             </Button>
           </div>
         </div>

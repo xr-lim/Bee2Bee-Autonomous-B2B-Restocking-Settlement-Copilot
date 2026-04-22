@@ -19,22 +19,32 @@ export function RestockAlertPanel({
   defaultOpen = false,
 }: RestockAlertPanelProps) {
   const [open, setOpen] = useState(defaultOpen)
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(
+    () => new Set()
+  )
+  const visibleRecommendations = recommendations.filter(
+    (item) => !dismissedIds.has(item.id)
+  )
 
-  if (recommendations.length === 0) {
+  if (visibleRecommendations.length === 0) {
     return null
   }
 
-  const totalQuantity = recommendations.reduce(
+  const totalQuantity = visibleRecommendations.reduce(
     (sum, item) => sum + item.quantity,
     0
   )
-  const totalSpend = recommendations.reduce(
+  const totalSpend = visibleRecommendations.reduce(
     (sum, item) => sum + parseSpend(item.estimatedSpend),
     0
   )
   const uniqueSuppliers = Array.from(
-    new Set(recommendations.map((item) => item.supplier))
+    new Set(visibleRecommendations.map((item) => item.supplier))
   )
+
+  function handleDismiss(id: string) {
+    setDismissedIds((current) => new Set([...current, id]))
+  }
 
   return (
     <Card className="rounded-[14px] border border-[#8B5CF6]/35 bg-[#111827] py-0 shadow-none ring-0">
@@ -52,8 +62,8 @@ export function RestockAlertPanel({
             <StatusBadge label="Restock detected" tone="ai" />
             <div className="min-w-0 truncate text-[14px] text-[#E5E7EB]">
               <span className="font-semibold">
-                {recommendations.length} SKU
-                {recommendations.length > 1 ? "s" : ""} going low
+                {visibleRecommendations.length} SKU
+                {visibleRecommendations.length > 1 ? "s" : ""} going low
               </span>
               <span className="ml-2 text-[12px] text-[#9CA3AF]">
                 across {uniqueSuppliers.length} supplier
@@ -66,7 +76,7 @@ export function RestockAlertPanel({
 
           <div className="flex shrink-0 items-center gap-3">
             <div className="hidden items-center gap-1.5 md:flex">
-              {recommendations.slice(0, 4).map((item) => (
+              {visibleRecommendations.slice(0, 4).map((item) => (
                 <StatusBadge
                   key={item.id}
                   label={item.sku}
@@ -74,9 +84,9 @@ export function RestockAlertPanel({
                   className="h-6"
                 />
               ))}
-              {recommendations.length > 4 ? (
+              {visibleRecommendations.length > 4 ? (
                 <span className="text-[12px] text-[#9CA3AF]">
-                  +{recommendations.length - 4}
+                  +{visibleRecommendations.length - 4}
                 </span>
               ) : null}
             </div>
@@ -96,11 +106,12 @@ export function RestockAlertPanel({
 
         {open ? (
           <div className="space-y-3 border-t border-[#243047] bg-[#0B1220] p-4">
-            {recommendations.map((recommendation) => (
+            {visibleRecommendations.map((recommendation) => (
               <RestockOrderCard
                 key={recommendation.id}
                 recommendation={recommendation}
                 compact
+                onDismiss={handleDismiss}
               />
             ))}
           </div>
