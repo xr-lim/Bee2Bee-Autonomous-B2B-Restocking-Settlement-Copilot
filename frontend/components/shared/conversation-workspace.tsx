@@ -140,13 +140,22 @@ export function ConversationWorkspace({
 
     newSocket.on("receive_message", (data: any) => {
       if (data.sender !== "System") {
+         let attType: "image" | "pdf" | undefined = undefined;
+         if (data.file_url) {
+           if (data.file_type && data.file_type.includes("image")) attType = "image";
+           else if (data.file_type && data.file_type.includes("pdf")) attType = "pdf";
+         }
+
          setLiveMessages((prev) => [...prev, {
             id: `live-${Math.random()}`,
             type: data.sender === "Supplier" ? "supplier-message" : "merchant-action",
             author: data.sender === "Supplier" ? supplier?.name || "Supplier" : "Z.AI Auto-Action",
             sentiment: "neutral",
-            body: data.content,
-            language: "EN"
+            body: data.content || (attType === "image" ? "Uploaded an image" : attType === "pdf" ? "Uploaded a document" : "New message"),
+            language: "EN",
+            attachmentType: attType,
+            attachmentLabel: data.file_name,
+            file_url: data.file_url
          }])
       }
     })
@@ -736,13 +745,15 @@ function MessageBubble({
             invoice={invoice}
             attachmentType={message.attachmentType}
             attachmentLabel={message.attachmentLabel}
+            fileUrl={(message as any).file_url}
             onClick={onAttachmentClick}
           />
         ) : message.attachmentType ? (
-          <AttachmentPreview
+            <AttachmentPreview
             type={message.attachmentType}
             label={message.attachmentLabel ?? "Attachment"}
             orderSummary={message.orderSummary}
+            fileUrl={(message as any).file_url}
             inlinePdfExpanded={inlinePdfExpanded}
             onClick={onAttachmentClick}
           />
@@ -761,11 +772,13 @@ function SupplierInvoiceFrame({
   invoice,
   attachmentType,
   attachmentLabel,
+  fileUrl,
   onClick,
 }: {
   invoice: Invoice
   attachmentType?: NegotiationMessage["attachmentType"]
   attachmentLabel?: string
+  fileUrl?: string
   onClick: () => void
 }) {
   const isImage = attachmentType === "image"
@@ -809,12 +822,12 @@ function SupplierInvoiceFrame({
       >
         <div
           className={cn(
-            "flex size-12 shrink-0 items-center justify-center rounded-[10px]",
-            isImage ? "bg-[#172033]" : "bg-[#F59E0B]/10 text-[#FBBF24]"
+            "flex size-12 shrink-0 items-center justify-center rounded-[10px] overflow-hidden bg-[#172033]",
+            !fileUrl && "bg-[#F59E0B]/10 text-[#FBBF24]"
           )}
         >
-          {isImage ? (
-            <div className="h-full w-full rounded-[10px] bg-[linear-gradient(135deg,#172033,#111827_45%,#243047)]" />
+          {fileUrl && isImage ? (
+            <img src={fileUrl} alt="Thumbnail" className="w-full h-full object-cover" />
           ) : (
             <AttachmentIcon className="size-5" aria-hidden="true" />
           )}
@@ -898,12 +911,14 @@ function AttachmentPreview({
   type,
   label,
   orderSummary,
+  fileUrl,
   inlinePdfExpanded,
   onClick,
 }: {
   type: NonNullable<NegotiationMessage["attachmentType"]>
   label: string
   orderSummary?: OrderSummary
+  fileUrl?: string
   inlinePdfExpanded: boolean
   onClick: () => void
 }) {
@@ -958,9 +973,13 @@ function AttachmentPreview({
         <button
           type="button"
           onClick={onClick}
-          className="block h-24 w-full border-t border-[#243047] bg-[linear-gradient(135deg,#172033,#111827_45%,#243047)] transition-opacity hover:opacity-90"
+          className="block h-36 w-full border-t border-[#243047] bg-[linear-gradient(135deg,#172033,#111827_45%,#243047)] transition-opacity hover:opacity-90 overflow-hidden relative"
           aria-label={`Preview ${label}`}
-        />
+        >
+          {fileUrl && (
+             <img src={fileUrl} alt={label} className="w-full h-full object-cover" />
+          )}
+        </button>
       ) : null}
       {type === "voice" ? (
         <button
@@ -1124,6 +1143,7 @@ function EvidenceBody({
 }) {
   const { message, invoice } = preview
   const type = message.attachmentType
+  const fileUrl = (message as any).file_url;
 
   const title = invoice
     ? `Invoice · ${invoice.invoiceNumber}`
@@ -1144,15 +1164,23 @@ function EvidenceBody({
       </SheetHeader>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 pt-4">
+        {fileUrl && (type === "image" || type === "screenshot") ? (
+          <ImagePreviewBody message={message} />
+        ) : null}
+
+        {fileUrl && type === "pdf" ? (
+          <PdfPreviewBody message={message} />
+        ) : null}
+
         {invoice ? (
           <InvoiceDocumentPreview invoice={invoice} supplier={supplier} />
         ) : null}
 
-        {!invoice && (type === "image" || type === "screenshot") ? (
+        {!fileUrl && (type === "image" || type === "screenshot") ? (
           <ImagePreviewBody message={message} />
         ) : null}
 
-        {!invoice && type === "pdf" ? (
+        {!fileUrl && type === "pdf" && !invoice ? (
           <PdfPreviewBody message={message} />
         ) : null}
 
@@ -1192,53 +1220,72 @@ function EvidenceMetaCard({ message }: { message: NegotiationMessage }) {
 }
 
 function ImagePreviewBody({ message }: { message: NegotiationMessage }) {
+  const fileUrl = (message as any).file_url;
+  
   return (
     <div className="rounded-[12px] border border-[#243047] bg-[#0F1728] p-4">
-      <div className="relative aspect-[4/3] overflow-hidden rounded-[10px] border border-[#243047] bg-[linear-gradient(135deg,#172033,#111827_40%,#243047_80%,#1F2A44)]">
-        <div className="absolute inset-x-4 top-4 flex items-center justify-between text-[13px] text-[#94A3B8]">
-          <span>{message.attachmentLabel}</span>
-          <span className="font-mono">JPG · 1.2 MB</span>
-        </div>
-        <div className="absolute inset-x-6 bottom-5 flex flex-col gap-2">
-          <span className="h-3 w-2/3 rounded bg-[#334155]/60" />
-          <span className="h-3 w-1/2 rounded bg-[#334155]/60" />
-          <span className="h-3 w-3/4 rounded bg-[#334155]/60" />
+      <div className="relative aspect-[4/3] overflow-hidden rounded-[10px] border border-[#243047] bg-[linear-gradient(135deg,#172033,#111827_40%,#243047_80%,#1F2A44)] flex items-center justify-center">
+        {fileUrl ? (
+           <img src={fileUrl} alt={message.attachmentLabel || "Preview"} className="w-full h-full object-contain bg-black/40" />
+        ) : (
+          <div className="absolute inset-x-6 bottom-5 flex flex-col gap-2">
+            <span className="h-3 w-2/3 rounded bg-[#334155]/60" />
+            <span className="h-3 w-1/2 rounded bg-[#334155]/60" />
+            <span className="h-3 w-3/4 rounded bg-[#334155]/60" />
+          </div>
+        )}
+        <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/70 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-4 top-4 flex items-center justify-between text-[13px] text-white z-10 font-medium drop-shadow-md">
+          <span className="truncate max-w-[70%]">{message.attachmentLabel || "Image Attachment"}</span>
+          <span className="font-mono bg-black/40 px-2 py-1 rounded">IMAGE</span>
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-[13px] text-[#9CA3AF]">
-        <span>Auto-detected: hand-written route board</span>
-        <span>OCR confidence: 84%</span>
+        <span>Auto-detected: Document metadata</span>
+        <span>Confidence: High</span>
       </div>
     </div>
   )
 }
 
 function PdfPreviewBody({ message }: { message: NegotiationMessage }) {
+  const fileUrl = (message as any).file_url;
+
   return (
     <div className="rounded-[12px] border border-[#243047] bg-[#0F1728] p-4">
-      <div className="space-y-3">
-        {[0, 1].map((index) => (
-          <div
-            key={index}
-            className="rounded-[10px] border border-[#243047] bg-[#F8FAFC] p-5 text-[#111827]"
-          >
-            <div className="mb-4 flex items-center justify-between border-b border-[#CBD5E1] pb-2">
-              <span className="text-[13px] font-semibold uppercase tracking-wider">
-                {message.attachmentLabel ?? "Document"} · page {index + 1}
-              </span>
-              <span className="text-[12px] text-[#64748B]">A4</span>
+      {fileUrl ? (
+        <div className="w-full aspect-[1/1.414] rounded-[10px] overflow-hidden border border-[#243047] bg-white">
+          <iframe
+            src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+            className="w-full h-full border-none"
+            title="PDF Preview"
+          />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {[0, 1].map((index) => (
+            <div
+              key={index}
+              className="rounded-[10px] border border-[#243047] bg-[#F8FAFC] p-5 text-[#111827]"
+            >
+              <div className="mb-4 flex items-center justify-between border-b border-[#CBD5E1] pb-2">
+                <span className="text-[13px] font-semibold uppercase tracking-wider">
+                  {message.attachmentLabel ?? "Document"} · page {index + 1}
+                </span>
+                <span className="text-[12px] text-[#64748B]">A4</span>
+              </div>
+              <div className="space-y-2">
+                <div className="h-3 w-3/4 rounded bg-[#CBD5E1]" />
+                <div className="h-3 w-2/3 rounded bg-[#CBD5E1]" />
+                <div className="h-3 w-5/6 rounded bg-[#CBD5E1]" />
+                <div className="h-3 w-1/2 rounded bg-[#CBD5E1]" />
+                <div className="mt-4 h-3 w-1/3 rounded bg-[#CBD5E1]" />
+                <div className="h-3 w-4/5 rounded bg-[#CBD5E1]" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <div className="h-3 w-3/4 rounded bg-[#CBD5E1]" />
-              <div className="h-3 w-2/3 rounded bg-[#CBD5E1]" />
-              <div className="h-3 w-5/6 rounded bg-[#CBD5E1]" />
-              <div className="h-3 w-1/2 rounded bg-[#CBD5E1]" />
-              <div className="mt-4 h-3 w-1/3 rounded bg-[#CBD5E1]" />
-              <div className="h-3 w-4/5 rounded bg-[#CBD5E1]" />
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
