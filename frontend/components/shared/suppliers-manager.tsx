@@ -2,6 +2,7 @@
 
 import {
   Building2,
+  Pencil,
   CheckSquare,
   ChevronDown,
   Plus,
@@ -31,7 +32,9 @@ import type { Product, StatusTone, Supplier } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import {
   createSupplierAction,
+  deleteSupplierAction,
   setSupplierAssignmentAction,
+  updateSupplierAction,
 } from "@/lib/actions"
 
 type SuppliersManagerProps = {
@@ -41,10 +44,12 @@ type SuppliersManagerProps = {
 
 type SupplierAssignments = Record<string, Set<string>>
 type SupplierPayload = {
+  supplierId?: string
   name: string
   region: string
   leadTimeDays: number
   reliabilityScore: number
+  status: Supplier["status"]
 }
 
 const statusTone: Record<Supplier["status"], StatusTone> = {
@@ -93,13 +98,13 @@ export function SuppliersManager({
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
   const filteredSuppliers = useMemo(() => {
     const keyword = query.trim().toLowerCase()
-    if (!keyword) return suppliers
     return suppliers.filter(
       (supplier) =>
         (statusFilter === "all" || supplier.status === statusFilter) &&
@@ -160,7 +165,33 @@ export function SuppliersManager({
         setError(result.message ?? "Could not save supplier.")
         return
       }
-      setDialogOpen(false)
+      setCreateDialogOpen(false)
+      router.refresh()
+    })
+  }
+
+  function handleUpdateSupplier(supplier: SupplierPayload) {
+    setError(null)
+    startTransition(async () => {
+      const result = await updateSupplierAction(supplier)
+      if (!result.ok) {
+        setError(result.message ?? "Could not update supplier.")
+        return
+      }
+      setEditingSupplier(null)
+      router.refresh()
+    })
+  }
+
+  function handleDeleteSupplier(supplierId: string) {
+    setError(null)
+    startTransition(async () => {
+      const result = await deleteSupplierAction({ supplierId })
+      if (!result.ok) {
+        setError(result.message ?? "Could not delete supplier.")
+        return
+      }
+      setEditingSupplier(null)
       router.refresh()
     })
   }
@@ -214,7 +245,7 @@ export function SuppliersManager({
               Inactive
             </option>
           </select>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button
                 type="button"
@@ -224,7 +255,10 @@ export function SuppliersManager({
                 Add supplier
               </Button>
             </DialogTrigger>
-            <AddSupplierDialog
+            <SupplierDialog
+              key="create-supplier"
+              title="Add new supplier"
+              description="Seed the supplier in the registry, then assign SKUs from the row that appears in the list."
               onSubmit={handleAddSupplier}
               pending={isPending}
               actionError={error}
@@ -324,9 +358,45 @@ export function SuppliersManager({
                           <p className="text-[13px] font-semibold text-[#E5E7EB]">
                             SKU assignments for {supplier.name}
                           </p>
-                          <p className="text-[12px] text-[#9CA3AF]">
-                            Tick the SKUs this supplier can serve.
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[12px] text-[#9CA3AF]">
+                              Tick the SKUs this supplier can serve.
+                            </p>
+                            <Dialog
+                              open={editingSupplier?.id === supplier.id}
+                              onOpenChange={(open) =>
+                                setEditingSupplier(open ? supplier : null)
+                              }
+                            >
+                              <DialogTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-8 rounded-[10px] border-[#243047] bg-[#111827] px-2.5 text-[12px] text-[#E5E7EB] hover:bg-[#243047]"
+                                >
+                                  <Pencil className="size-3.5" aria-hidden="true" />
+                                  Edit supplier
+                                </Button>
+                              </DialogTrigger>
+                              <SupplierDialog
+                                key={supplier.id}
+                                title="Edit supplier"
+                                description="Update supplier profile details and save the manual status."
+                                initialValues={{
+                                  supplierId: supplier.id,
+                                  name: supplier.name,
+                                  region: supplier.region,
+                                  leadTimeDays: supplier.leadTimeDays,
+                                  reliabilityScore: supplier.reliabilityScore,
+                                  status: supplier.status,
+                                }}
+                                onSubmit={handleUpdateSupplier}
+                                onDelete={handleDeleteSupplier}
+                                pending={isPending}
+                                actionError={error}
+                              />
+                            </Dialog>
+                          </div>
                         </div>
                         <ul className="grid grid-cols-2 gap-2 xl:grid-cols-3">
                           {products.map((product) => {
@@ -387,23 +457,43 @@ export function SuppliersManager({
   )
 }
 
-type AddSupplierDialogProps = {
+type SupplierDialogProps = {
+  title: string
+  description: string
+  initialValues?: SupplierPayload
   onSubmit: (supplier: SupplierPayload) => void
+  onDelete?: (supplierId: string) => void
   pending?: boolean
   actionError?: string | null
 }
 
-function AddSupplierDialog({
+function SupplierDialog({
+  title,
+  description,
+  initialValues,
   onSubmit,
+  onDelete,
   pending = false,
   actionError,
-}: AddSupplierDialogProps) {
-  const [name, setName] = useState("")
-  const [region, setRegion] = useState("")
-  const [leadTime, setLeadTime] = useState("")
-  const [reliability, setReliability] = useState("")
-  const [status, setStatus] = useState<Supplier["status"]>("watchlist")
+}: SupplierDialogProps) {
+  const [name, setName] = useState(initialValues?.name ?? "")
+  const [region, setRegion] = useState(initialValues?.region ?? "")
+  const [leadTime, setLeadTime] = useState(
+    initialValues?.leadTimeDays?.toString() ?? ""
+  )
+  const [reliability, setReliability] = useState(
+    initialValues?.reliabilityScore?.toString() ?? ""
+  )
+  const [status, setStatus] = useState<Supplier["status"]>(
+    initialValues?.status ?? "watchlist"
+  )
   const [error, setError] = useState<string | null>(null)
+
+  function handleDelete() {
+    if (!initialValues?.supplierId || !onDelete || pending) return
+    if (!window.confirm(`Delete supplier "${initialValues.name}"?`)) return
+    onDelete(initialValues.supplierId)
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -420,10 +510,12 @@ function AddSupplierDialog({
 
     setError(null)
     onSubmit({
+      supplierId: initialValues?.supplierId,
       name: name.trim(),
       region: region.trim(),
       leadTimeDays: leadNumber,
       reliabilityScore: reliabilityNumber,
+      status,
     })
   }
 
@@ -431,11 +523,10 @@ function AddSupplierDialog({
     <DialogContent className="max-w-lg border-[#243047] bg-[#0F1728] text-[#E5E7EB] ring-1 ring-[#243047]">
       <DialogHeader>
         <DialogTitle className="text-[16px] font-semibold text-[#E5E7EB]">
-          Add new supplier
+          {title}
         </DialogTitle>
         <DialogDescription className="text-[12px] text-[#9CA3AF]">
-          Seed the supplier in the registry, then assign SKUs from the row that
-          appears in the list.
+          {description}
         </DialogDescription>
       </DialogHeader>
 
@@ -498,6 +589,17 @@ function AddSupplierDialog({
         ) : null}
 
         <DialogFooter>
+          {initialValues?.supplierId && onDelete ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDelete}
+              disabled={pending}
+              className="mr-auto h-9 rounded-[10px] border-[#7F1D1D] bg-[#1F151A] px-3 text-[#FCA5A5] hover:bg-[#301F26]"
+            >
+              Delete supplier
+            </Button>
+          ) : null}
           <DialogClose asChild>
             <Button
               type="button"
@@ -512,7 +614,11 @@ function AddSupplierDialog({
             disabled={pending}
             className="h-9 rounded-[10px] bg-[#3B82F6] px-3 text-white hover:bg-[#2563EB]"
           >
-            {pending ? "Saving..." : "Save supplier"}
+            {pending
+              ? "Saving..."
+              : initialValues
+                ? "Save supplier"
+                : "Add supplier"}
           </Button>
         </DialogFooter>
       </form>

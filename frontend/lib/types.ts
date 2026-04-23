@@ -69,6 +69,8 @@ export type RestockRequest = {
   productSku: string
   productName: string
   workflowId?: string
+  targetPriceMin?: number
+  targetPriceMax?: number
   requestedThreshold?: number
   requestedQuantity?: number
   reason: string

@@ -18,10 +18,16 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { startRestockWorkflowAction } from "@/lib/actions"
+import {
+  cancelRestockRequestAction,
+  markRestockRequestReviewedAction,
+  startRestockWorkflowAction,
+  updateRestockRequestAction,
+} from "@/lib/actions"
 import type {
   Product,
   RestockRecommendation,
+  RestockRequest,
   Supplier,
   WorkflowState,
 } from "@/lib/types"
@@ -52,16 +58,19 @@ type RestockFormProps = {
   recommendation: RestockRecommendation
   product: Product
   supplier?: Supplier
+  suppliers: Supplier[]
 }
 
 export function RestockForm({
   recommendation,
   product,
   supplier,
+  suppliers,
 }: RestockFormProps) {
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(() => ({
+    supplierId: product.supplierId,
     targetPrice: recommendation.targetPrice,
     quantity: recommendation.quantity,
     estimatedSpend: recommendation.estimatedSpend,
@@ -72,12 +81,38 @@ export function RestockForm({
     useState<WorkflowState>()
   const [animatedActiveStep, setAnimatedActiveStep] = useState<number>()
   const [isStartingWorkflow, setIsStartingWorkflow] = useState(false)
+  const [isCancellingRequest, setIsCancellingRequest] = useState(false)
+  const [isSavingRequest, setIsSavingRequest] = useState(false)
   const [actionError, setActionError] = useState<string>()
+  const [optimisticRequestStatus, setOptimisticRequestStatus] = useState<
+    RestockRequest["status"] | undefined
+  >(recommendation.restockRequestStatus)
+  const supplierLookup = useMemo(
+    () => new Map(suppliers.map((item) => [item.id, item])),
+    [suppliers]
+  )
+  const supplierOptions = useMemo(() => {
+    const trackedIds = new Set([
+      product.supplierId,
+      ...(product.suppliers?.map((item) => item.supplierId) ?? []),
+    ])
 
-  const thresholdDeficit = product.stockOnHand - product.currentThreshold
-  const leadTime = supplier?.leadTimeDays ?? 0
+    return suppliers
+      .slice()
+      .sort((first, second) => {
+        const firstTracked = trackedIds.has(first.id) ? 0 : 1
+        const secondTracked = trackedIds.has(second.id) ? 0 : 1
+        if (firstTracked !== secondTracked) return firstTracked - secondTracked
+        return first.name.localeCompare(second.name)
+      })
+  }, [product.supplierId, product.suppliers, suppliers])
 
   const fields = isEditing ? draft : committed
+  const displaySupplier = supplierLookup.get(fields.supplierId) ?? supplier
+  const thresholdDeficit = product.stockOnHand - product.currentThreshold
+  const leadTime = displaySupplier?.leadTimeDays ?? 0
+  const displayRequestStatus =
+    optimisticRequestStatus ?? recommendation.restockRequestStatus
   const displayWorkflowState =
     optimisticWorkflowState ?? recommendation.workflowState
   const mappedActiveStep =
@@ -115,9 +150,38 @@ export function RestockForm({
     return () => window.clearTimeout(timer)
   }, [animatedActiveStep, router])
 
+  useEffect(() => {
+    const requestId = recommendation.restockRequestId
+
+    if (workflowStarted || !requestId || displayRequestStatus !== "pending") {
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      const result = await markRestockRequestReviewedAction({
+        requestId,
+        sku: product.sku,
+      })
+
+      if (!cancelled && result.ok) {
+        setOptimisticRequestStatus("reviewed")
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    workflowStarted,
+    recommendation.restockRequestId,
+    displayRequestStatus,
+    product.sku,
+  ])
+
   function handleSave() {
-    setCommitted(draft)
-    setIsEditing(false)
+    void saveDraft()
   }
 
   function handleCancel() {
@@ -150,6 +214,56 @@ export function RestockForm({
     setIsStartingWorkflow(false)
   }
 
+  async function handleCancelRequest() {
+    if (!recommendation.restockRequestId || isCancellingRequest) return
+
+    setIsCancellingRequest(true)
+    setActionError(undefined)
+    const result = await cancelRestockRequestAction({
+      requestId: recommendation.restockRequestId,
+      sku: product.sku,
+    })
+
+    if (result.ok) {
+      router.refresh()
+      return
+    }
+
+    setActionError(result.message ?? "Unable to cancel restock request.")
+    setIsCancellingRequest(false)
+  }
+
+  async function saveDraft() {
+    if (!recommendation.restockRequestId || isSavingRequest) return
+
+    setIsSavingRequest(true)
+    setActionError(undefined)
+    const result = await updateRestockRequestAction({
+      requestId: recommendation.restockRequestId,
+      sku: product.sku,
+      targetPrice: draft.targetPrice,
+      quantity: draft.quantity,
+      reason: draft.reason,
+      supplierId: draft.supplierId,
+    })
+
+    if (result.ok) {
+      const nextCommitted = {
+        ...draft,
+        estimatedSpend: deriveEstimatedSpend(draft.targetPrice, draft.quantity),
+      }
+      setDraft(nextCommitted)
+      setCommitted(nextCommitted)
+      setIsEditing(false)
+      setIsSavingRequest(false)
+      router.refresh()
+      return
+    }
+
+    setActionError(result.message ?? "Unable to save restock request.")
+    setIsSavingRequest(false)
+  }
+
   const showCompactWorkflow = workflowStarted
   const buttonLabel = isStartingWorkflow ? "Starting…" : "AI Restock"
 
@@ -176,9 +290,9 @@ export function RestockForm({
             <div>
               <div className="flex items-center gap-2">
                 <StatusBadge label="Restock detected" tone="ai" />
-                {recommendation.restockRequestStatus ? (
+                {displayRequestStatus ? (
                   <StatusBadge
-                    label={`Request ${recommendation.restockRequestStatus}`}
+                    label={`Request ${displayRequestStatus}`}
                     tone="default"
                   />
                 ) : null}
@@ -232,10 +346,36 @@ export function RestockForm({
           <SectionLabel>Order terms</SectionLabel>
           <div className="mt-2 grid grid-cols-2 gap-3">
             <ReadOnlyField label="SKU" value={recommendation.sku} />
-            <ReadOnlyField
-              label="Supplier"
-              value={supplier?.name ?? recommendation.supplier}
-            />
+            <FieldRow label="Supplier" editing={isEditing}>
+              {isEditing ? (
+                <select
+                  value={draft.supplierId}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      supplierId: event.target.value,
+                    }))
+                  }
+                  className="h-9 w-full rounded-[10px] border border-[#243047] bg-[#0B1220] px-3 text-[14px] text-[#E5E7EB] outline-none"
+                >
+                  {supplierOptions.map((option) => (
+                    <option
+                      key={option.id}
+                      value={option.id}
+                      className="bg-[#111827] text-[#E5E7EB]"
+                    >
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <FieldValue>
+                  {displaySupplier?.name ??
+                    supplier?.name ??
+                    recommendation.supplier}
+                </FieldValue>
+              )}
+            </FieldRow>
 
             <FieldRow label="Target Price" editing={isEditing}>
               {isEditing ? (
@@ -245,6 +385,10 @@ export function RestockForm({
                     setDraft((current) => ({
                       ...current,
                       targetPrice: event.target.value,
+                      estimatedSpend: deriveEstimatedSpend(
+                        event.target.value,
+                        current.quantity
+                      ),
                     }))
                   }
                   className="h-9 rounded-[10px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB] placeholder:text-[#6B7280]"
@@ -261,10 +405,17 @@ export function RestockForm({
                   min={0}
                   value={draft.quantity}
                   onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      quantity: Number(event.target.value),
-                    }))
+                    setDraft((current) => {
+                      const quantity = Number(event.target.value)
+                      return {
+                        ...current,
+                        quantity,
+                        estimatedSpend: deriveEstimatedSpend(
+                          current.targetPrice,
+                          quantity
+                        ),
+                      }
+                    })
                   }
                   className="h-9 rounded-[10px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB]"
                 />
@@ -276,20 +427,7 @@ export function RestockForm({
             </FieldRow>
 
             <FieldRow label="Est. Spend" editing={isEditing}>
-              {isEditing ? (
-                <Input
-                  value={draft.estimatedSpend}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      estimatedSpend: event.target.value,
-                    }))
-                  }
-                  className="h-9 rounded-[10px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB]"
-                />
-              ) : (
-                <FieldValue>{fields.estimatedSpend}</FieldValue>
-              )}
+              <FieldValue>{fields.estimatedSpend}</FieldValue>
             </FieldRow>
           </div>
         </section>
@@ -355,14 +493,36 @@ export function RestockForm({
                 <Button
                   type="button"
                   onClick={handleSave}
+                  disabled={isSavingRequest}
                   className="h-9 rounded-[10px] bg-[#3B82F6] px-4 text-white hover:bg-[#2563EB]"
                 >
-                  <Save className="size-4" aria-hidden="true" />
+                  {isSavingRequest ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Save className="size-4" aria-hidden="true" />
+                  )}
                   Save changes
                 </Button>
               </>
             ) : (
               <>
+                <Button
+                  type="button"
+                  onClick={handleCancelRequest}
+                  variant="outline"
+                  disabled={isCancellingRequest || isStartingWorkflow}
+                  className="h-9 rounded-[10px] border-[#7F1D1D] bg-[#1F151A] px-3 text-[#FCA5A5] hover:bg-[#301F26] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isCancellingRequest ? (
+                    <Loader2
+                      className="size-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <X className="size-4" aria-hidden="true" />
+                  )}
+                  Cancel request
+                </Button>
                 <Button
                   type="button"
                   onClick={handleEdit}
@@ -632,4 +792,19 @@ function FieldValue({ children }: { children: React.ReactNode }) {
       {children}
     </p>
   )
+}
+
+function deriveEstimatedSpend(targetPrice: string, quantity: number) {
+  const matches = targetPrice.match(/\d+(?:\.\d+)?/g) ?? []
+  if (matches.length === 0 || quantity <= 0) {
+    return "Target pending"
+  }
+
+  const numericValues = matches.map((value) => Number(value))
+  const unitPrice = Math.max(...numericValues)
+  const total = unitPrice * quantity
+
+  if (total >= 1_000_000) return `$${(total / 1_000_000).toFixed(1)}M`
+  if (total >= 1_000) return `$${(total / 1_000).toFixed(1)}K`
+  return `$${total.toFixed(0)}`
 }

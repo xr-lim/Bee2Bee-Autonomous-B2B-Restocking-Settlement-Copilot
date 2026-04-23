@@ -3,12 +3,14 @@ import {
   AlertTriangle,
   Bot,
   MessageSquareText,
+  PackagePlus,
   ReceiptText,
   SlidersHorizontal,
 } from "lucide-react"
 
 import { PageHeader } from "@/components/layout/page-header"
 import { CollapsibleSection } from "@/components/shared/collapsible-section"
+import { DashboardRestockRowActions } from "@/components/shared/dashboard-restock-row-actions"
 import { DashboardCharts } from "@/components/shared/dashboard-charts"
 import { StatCard } from "@/components/shared/stat-card"
 import { StatusBadge } from "@/components/shared/status-badge"
@@ -31,6 +33,8 @@ import {
   getSuppliers,
 } from "@/lib/data"
 import type { Invoice, StatusTone, Supplier } from "@/lib/types"
+
+export const dynamic = "force-dynamic"
 
 const statIcons = [
   AlertTriangle,
@@ -110,87 +114,95 @@ export default async function DashboardPage() {
 
       <section className="grid grid-cols-[1fr_340px] gap-8">
         <div className="space-y-6">
-          <CollapsibleSection
-            title="Restock Queue"
-            description="SKUs below current threshold · ordered by urgency."
-            headerAccessory={
-              <StatusBadge
-                label={`${actionableRestocks.length} items`}
-                tone={actionableRestocks.length > 0 ? "warning" : "default"}
-              />
-            }
-            defaultOpen
-          >
-            <Table>
-              <TableHeader>
-                <TableRow className="border-[#243047] hover:bg-transparent [&>th]:h-12 [&>th]:px-5 [&>th]:text-[13px] [&>th]:text-[#9CA3AF]">
-                  <TableHead>Product</TableHead>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>Stock / Threshold</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead>Target Price</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {actionableRestocks.map((item) => {
-                  const belowThreshold = item.currentStock < item.currentThreshold
+          <div id="restock-queue">
+            <CollapsibleSection
+              title="Restock Queue"
+              description="SKUs below current threshold · ordered by urgency."
+              headerAccessory={
+                <StatusBadge
+                  label={`${actionableRestocks.length} items`}
+                  tone={actionableRestocks.length > 0 ? "warning" : "default"}
+                />
+              }
+              defaultOpen
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-[#243047] hover:bg-transparent [&>th]:h-12 [&>th]:px-5 [&>th]:text-[13px] [&>th]:text-[#9CA3AF]">
+                    <TableHead>Product</TableHead>
+                    <TableHead>Supplier</TableHead>
+                    <TableHead>Stock / Threshold</TableHead>
+                    <TableHead>Quantity</TableHead>
+                    <TableHead>Target Price</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {actionableRestocks.map((item) => {
+                    const belowThreshold = item.currentStock < item.currentThreshold
 
-                  return (
-                    <TableRow
-                      key={item.id}
-                      className="border-[#243047] hover:bg-[#172033]/70 [&>td]:px-5 [&>td]:py-4"
-                    >
-                      <TableCell>
+                    return (
+                      <TableRow
+                        key={item.id}
+                        className="border-[#243047] hover:bg-[#172033]/70 [&>td]:px-5 [&>td]:py-4"
+                      >
+                        <TableCell>
                         <p className="text-[15px] font-medium text-[#E5E7EB]">
                           {item.productName}
                         </p>
-                        <p className="mt-1 font-mono text-[12px] text-[#6B7280]">
-                          {item.sku}
-                        </p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <p className="font-mono text-[12px] text-[#6B7280]">
+                            {item.sku}
+                          </p>
+                          <StatusBadge
+                            label={restockQueueStatus(item).label}
+                            tone={restockQueueStatus(item).tone}
+                          />
+                        </div>
                       </TableCell>
                       <TableCell className="text-[14px] text-[#9CA3AF]">
                         {item.supplier}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-baseline gap-1.5">
-                          <span
-                            className={
-                              belowThreshold
-                                ? "text-[15px] font-semibold text-[#F87171]"
-                                : "text-[15px] font-semibold text-[#E5E7EB]"
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-baseline gap-1.5">
+                            <span
+                              className={
+                                belowThreshold
+                                  ? "text-[15px] font-semibold text-[#F87171]"
+                                  : "text-[15px] font-semibold text-[#E5E7EB]"
+                              }
+                            >
+                              {item.currentStock}
+                            </span>
+                            <span className="text-[13px] text-[#6B7280]">
+                              / {item.currentThreshold}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-[15px] font-medium text-[#E5E7EB]">
+                          {item.quantity.toLocaleString("en-US")}
+                        </TableCell>
+                        <TableCell className="text-[14px] text-[#9CA3AF]">
+                          {item.targetPrice}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DashboardRestockRowActions
+                            sku={item.sku}
+                            requestId={item.restockRequestId}
+                            actionLabel={
+                              item.restockRequestStatus === "accepted"
+                                ? "View restocking"
+                                : "Review & restock"
                             }
-                          >
-                            {item.currentStock}
-                          </span>
-                          <span className="text-[13px] text-[#6B7280]">
-                            / {item.currentThreshold}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-[15px] font-medium text-[#E5E7EB]">
-                        {item.quantity.toLocaleString("en-US")}
-                      </TableCell>
-                      <TableCell className="text-[14px] text-[#9CA3AF]">
-                        {item.targetPrice}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          asChild
-                          variant="outline"
-                          className="h-9 rounded-[10px] border-[#243047] bg-[#172033] px-3 text-[13px] text-[#E5E7EB] hover:bg-[#243047]"
-                        >
-                          <Link href={`/inventory/${item.sku}`}>
-                            Review & restock
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </CollapsibleSection>
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </CollapsibleSection>
+          </div>
 
           <CollapsibleSection
             title="Invoice Action Queue"
@@ -297,6 +309,31 @@ export default async function DashboardPage() {
               </ul>
             </CardContent>
           </Card>
+
+          <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
+            <CardContent className="flex flex-col gap-3 p-4">
+              <Button
+                asChild
+                variant="outline"
+                className="h-14 w-full justify-center rounded-[10px] border-[#1D4ED8] bg-[#2563EB] px-4 text-[16px] font-semibold text-white hover:bg-[#1D4ED8]"
+              >
+                <Link href="/inventory">
+                  <SlidersHorizontal className="size-4" aria-hidden="true" />
+                  Analyze Threshold
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="h-14 w-full justify-center rounded-[10px] border-[#7C3AED] bg-[#8B5CF6] px-4 text-[16px] font-semibold text-white hover:bg-[#7C3AED]"
+              >
+                <Link href="#restock-queue">
+                  <PackagePlus className="size-4" aria-hidden="true" />
+                  Restock Suggestion
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </section>
 
@@ -312,20 +349,30 @@ export default async function DashboardPage() {
 function isActionableRestock(
   item: Awaited<ReturnType<typeof getRestockRecommendations>>[number]
 ) {
-  if (
-    [
-      "po_sent",
-      "waiting_supplier",
-      "invoice_processing",
-      "ready_for_approval",
-      "completed",
-    ].includes(item.workflowState ?? "")
-  ) {
-    return false
+  if (item.restockRequestStatus === "accepted") {
+    return item.workflowState !== "completed"
   }
 
   return (
     item.restockRequestStatus === "pending" ||
     item.restockRequestStatus === "reviewed"
   )
+}
+
+function restockQueueStatus(
+  item: Awaited<ReturnType<typeof getRestockRecommendations>>[number]
+): { label: string; tone: StatusTone } {
+  if (
+    item.restockRequestStatus === "accepted" &&
+    item.workflowState &&
+    item.workflowState !== "completed"
+  ) {
+    return { label: "Restocking", tone: "ai" }
+  }
+
+  if (item.restockRequestStatus === "reviewed") {
+    return { label: "Request reviewed", tone: "warning" }
+  }
+
+  return { label: "Request pending", tone: "default" }
 }

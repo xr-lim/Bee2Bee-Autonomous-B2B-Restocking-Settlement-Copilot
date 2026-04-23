@@ -19,6 +19,8 @@ import { buildInvoiceReasoning } from "@/lib/ai-reasoning"
 import { getInvoices, getProducts, getSuppliers } from "@/lib/data"
 import type { Invoice, Product, StatusTone } from "@/lib/types"
 
+export const dynamic = "force-dynamic"
+
 const riskTone: Record<Invoice["riskLevel"], StatusTone> = {
   "Low Risk": "success",
   "Medium Risk": "warning",

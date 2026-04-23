@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { getInvoices, getSuppliers } from "@/lib/data"
 
+export const dynamic = "force-dynamic"
+
 export default async function CompletedInvoicesPage() {
   const [invoices, suppliers] = await Promise.all([getInvoices(), getSuppliers()])
   const completedInvoices = invoices

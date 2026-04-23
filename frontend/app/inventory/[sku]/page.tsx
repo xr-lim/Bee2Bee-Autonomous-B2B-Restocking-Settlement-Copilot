@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 
 import { PageHeader } from "@/components/layout/page-header"
 import { ProductStockDemandChart } from "@/components/shared/inventory-charts"
+import { ManualRestockButton } from "@/components/shared/manual-restock-button"
 import { ProductDetailsEditor } from "@/components/shared/product-details-editor"
 import { RestockForm } from "@/components/shared/restock-form"
 import { ThresholdChangeReviewPanel } from "@/components/shared/threshold-change-review-panel"
@@ -10,14 +11,18 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   getConversations,
+  getLatestWorkflowStateByProductId,
   getProductStockDemandTrendBySku,
   getProducts,
   getRestockRecommendations,
+  getRestockRequests,
   getSuppliers,
   getThresholdAnalysisBySku,
   getThresholdChangeRequests,
 } from "@/lib/data"
 import type { StatusTone, StockStatus } from "@/lib/types"
+
+export const dynamic = "force-dynamic"
 
 const stockStatusTone: Record<StockStatus, StatusTone> = {
   healthy: "success",
@@ -48,16 +53,20 @@ export default async function InventoryDetailPage({
     products,
     suppliers,
     conversations,
+    latestWorkflowStateByProductId,
     thresholdAnalysisBySku,
     restockRecommendations,
+    restockRequests,
     thresholdChangeRequests,
     productStockDemandTrendBySku,
   ] = await Promise.all([
     getProducts(),
     getSuppliers(),
     getConversations(),
+    getLatestWorkflowStateByProductId(),
     getThresholdAnalysisBySku(),
     getRestockRecommendations(),
+    getRestockRequests(),
     getThresholdChangeRequests(),
     getProductStockDemandTrendBySku(),
   ])
@@ -84,6 +93,19 @@ export default async function InventoryDetailPage({
   const restockRecommendation = restockRecommendations.find(
     (item) => item.sku === product.sku
   )
+  const activeRestockRequest = restockRequests.find(
+    (item) =>
+      item.productSku === product.sku &&
+      ["pending", "reviewed", "accepted"].includes(item.status)
+  )
+  const latestWorkflowState = latestWorkflowStateByProductId[product.id]
+  const hasActiveWorkflow =
+    latestWorkflowState != null &&
+    !["stock_healthy", "completed"].includes(latestWorkflowState)
+  const showManualRestockButton =
+    !activeRestockRequest &&
+    !hasActiveWorkflow &&
+    !restockRecommendation
   const pendingThresholdRequest = thresholdChangeRequests.find(
     (item) => item.productSku === product.sku && item.status === "pending"
   )
@@ -102,9 +124,12 @@ export default async function InventoryDetailPage({
                 className="h-10 rounded-[10px] bg-[#3B82F6] px-4 text-white hover:bg-[#2563EB]"
               >
                 <Link href={`/conversations/${conversation.id}`}>
-                  View Auto Negotiation
+                  View Chat
                 </Link>
               </Button>
+            ) : null}
+            {showManualRestockButton ? (
+              <ManualRestockButton productId={product.id} sku={product.sku} />
             ) : null}
             <Button
               type="button"
@@ -188,6 +213,7 @@ export default async function InventoryDetailPage({
           recommendation={restockRecommendation}
           product={product}
           supplier={supplier}
+          suppliers={suppliers}
         />
       ) : null}
 

@@ -2,6 +2,8 @@ import { PageHeader } from "@/components/layout/page-header"
 import { SuppliersManager } from "@/components/shared/suppliers-manager"
 import { getProducts, getSuppliers } from "@/lib/data"
 
+export const dynamic = "force-dynamic"
+
 export default async function SuppliersPage() {
   const [suppliers, products] = await Promise.all([
     getSuppliers(),

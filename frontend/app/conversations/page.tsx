@@ -7,6 +7,8 @@ import {
   getSuppliers,
 } from "@/lib/data"
 
+export const dynamic = "force-dynamic"
+
 export default async function ConversationsPage() {
   const [conversations, invoices, products, suppliers] = await Promise.all([
     getConversations(),

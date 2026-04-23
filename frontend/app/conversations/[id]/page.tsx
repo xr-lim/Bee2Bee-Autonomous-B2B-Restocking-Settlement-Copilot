@@ -15,6 +15,8 @@ import {
 } from "@/lib/data"
 import type { Conversation, Invoice, Product } from "@/lib/types"
 
+export const dynamic = "force-dynamic"
+
 export async function generateStaticParams() {
   const conversations = await getConversations()
   return conversations.map((conversation) => ({ id: conversation.id }))

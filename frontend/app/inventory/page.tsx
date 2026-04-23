@@ -13,6 +13,8 @@ import {
   getThresholdChangeRequests,
 } from "@/lib/data"
 
+export const dynamic = "force-dynamic"
+
 const summaryIcons = [Boxes, AlertTriangle, PackageCheck]
 
 export default async function InventoryPage() {

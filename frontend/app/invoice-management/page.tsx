@@ -6,6 +6,8 @@ import { InvoiceBoard } from "@/components/shared/invoice-board"
 import { Button } from "@/components/ui/button"
 import { getInvoices, getSuppliers } from "@/lib/data"
 
+export const dynamic = "force-dynamic"
+
 export default async function InvoiceManagementPage() {
   const [invoices, suppliers] = await Promise.all([getInvoices(), getSuppliers()])
 

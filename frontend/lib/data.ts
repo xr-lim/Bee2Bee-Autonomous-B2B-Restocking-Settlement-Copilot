@@ -122,6 +122,7 @@ type RawSupplier = {
   region: string
   leadTimeDays: number
   reliabilityScore: number
+  status?: Supplier["status"]
   moq?: number | null
   notes?: string | null
   createdAt?: string
@@ -238,6 +239,8 @@ type RawRestockRequest = {
   id: string
   productId: string
   workflowId?: string | null
+  targetPriceMin?: number | null
+  targetPriceMax?: number | null
   requestedThreshold?: number | null
   requestedQuantity?: number | null
   reasonSummary: string
@@ -451,17 +454,6 @@ function conversationStatus(
   return "negotiating"
 }
 
-function displayProductStatus(status: string): StockStatus {
-  const statusMap: Record<string, StockStatus> = {
-    healthy: "healthy",
-    near_threshold: "near-threshold",
-    below_threshold: "below-threshold",
-    batch_candidate: "batch-candidate",
-  }
-
-  return statusMap[status] ?? "healthy"
-}
-
 function displayThresholdStatus(
   status: string
 ): ThresholdChangeRequest["status"] {
@@ -548,10 +540,25 @@ function reliabilityStatus(score: number): Supplier["status"] {
   return "inactive"
 }
 
-function derivedTrend(product: RawProduct) {
-  if (product.status === "below_threshold") return 12
-  if (product.status === "near_threshold") return -6
-  if (product.status === "batch_candidate") return 9
+const NEAR_THRESHOLD_BUFFER = 20
+
+function classifyStockStatus(stock: number, threshold: number): StockStatus {
+  if (stock < threshold) return "below-threshold"
+  if (stock - threshold <= NEAR_THRESHOLD_BUFFER) return "near-threshold"
+  return "healthy"
+}
+
+function resolveProductStatus(
+  product: RawProduct,
+  currentThreshold: number
+): StockStatus {
+  return classifyStockStatus(product.currentStock, currentThreshold)
+}
+
+function derivedTrend(status: StockStatus) {
+  if (status === "below-threshold") return 12
+  if (status === "near-threshold") return -6
+  if (status === "batch-candidate") return 9
   return -2
 }
 
@@ -646,7 +653,8 @@ function mapSuppliers(suppliers: RawSupplier[]): Supplier[] {
     region: supplier.region,
     reliabilityScore: Number(supplier.reliabilityScore),
     leadTimeDays: supplier.leadTimeDays,
-    status: reliabilityStatus(Number(supplier.reliabilityScore)),
+    status:
+      supplier.status ?? reliabilityStatus(Number(supplier.reliabilityScore)),
   }))
 }
 
@@ -669,6 +677,7 @@ function mapProducts(rows: Awaited<ReturnType<typeof getDomainRows>>): Product[]
 
   return rows.products.map((product) => {
     const currentThreshold = productCurrentThreshold(product)
+    const status = resolveProductStatus(product, currentThreshold)
     const supplierLinks = rows.productSuppliers.filter(
       (link) => link.productId === product.id
     )
@@ -677,7 +686,7 @@ function mapProducts(rows: Awaited<ReturnType<typeof getDomainRows>>): Product[]
       supplierLinks.find((link) => link.isPrimary)?.supplierId ??
       supplierLinks[0]?.supplierId ??
       ""
-    const trend30d = derivedTrend(product)
+    const trend30d = derivedTrend(status)
 
     return {
       id: product.id,
@@ -698,7 +707,7 @@ function mapProducts(rows: Awaited<ReturnType<typeof getDomainRows>>): Product[]
       supplierId: primarySupplierId,
       conversationId: conversationsByProductId.get(product.id)?.id ?? "",
       invoiceId: invoicesByProductId.get(product.id)?.id ?? "",
-      status: displayProductStatus(product.status),
+      status,
       pendingAiAnalysis: product.status === "batch_candidate",
       suppliers: supplierLinks.map((link) => {
         const supplier = suppliersById.get(link.supplierId)
@@ -749,34 +758,107 @@ function mapThresholdRequests(
   })
 }
 
+function activeRestockRequestPriority(
+  request: RawRestockRequest,
+  workflows: RawWorkflow[]
+) {
+  const workflow = request.workflowId
+    ? workflows.find((item) => item.id === request.workflowId)
+    : undefined
+  const hasActiveWorkflow =
+    workflow != null && workflow.currentState !== "completed"
+
+  if (request.status === "accepted" && hasActiveWorkflow) return 4
+  if (request.status === "accepted") return 3
+  if (request.status === "reviewed") return 2
+  if (request.status === "pending") return 1
+  return 0
+}
+
+function selectEffectiveActiveRestockRequests(
+  rows: Awaited<ReturnType<typeof getDomainRows>>
+) {
+  const activeRequests = rows.restockRequests.filter((request) =>
+    ["pending", "reviewed", "accepted"].includes(request.status)
+  )
+  const grouped = new Map<string, RawRestockRequest[]>()
+
+  activeRequests.forEach((request) => {
+    const existing = grouped.get(request.productId) ?? []
+    existing.push(request)
+    grouped.set(request.productId, existing)
+  })
+
+  return new Map(
+    Array.from(grouped.entries()).map(([productId, requests]) => {
+      const selected = requests
+        .slice()
+        .sort((first, second) => {
+          const priorityDiff =
+            activeRestockRequestPriority(second, rows.workflows) -
+            activeRestockRequestPriority(first, rows.workflows)
+
+          if (priorityDiff !== 0) {
+            return priorityDiff
+          }
+
+          return (
+            new Date(second.updatedAt ?? second.createdAt ?? 0).getTime() -
+            new Date(first.updatedAt ?? first.createdAt ?? 0).getTime()
+          )
+        })[0]
+
+      return [productId, selected]
+    })
+  )
+}
+
 function mapRestockRequests(
   rows: Awaited<ReturnType<typeof getDomainRows>>
 ): RestockRequest[] {
   const productById = new Map(rows.products.map((product) => [product.id, product]))
+  const effectiveActiveRequests = selectEffectiveActiveRestockRequests(rows)
 
-  return rows.restockRequests.map((request) => {
-    const product = productById.get(request.productId)
+  return rows.restockRequests
+    .filter((request) => {
+      if (!["pending", "reviewed", "accepted"].includes(request.status)) {
+        return true
+      }
 
-    return {
-      id: request.id,
-      productSku: product?.sku ?? request.productId,
-      productName: product?.name ?? "Unknown product",
-      workflowId: request.workflowId ?? undefined,
-      requestedThreshold: request.requestedThreshold ?? undefined,
-      requestedQuantity: request.requestedQuantity ?? undefined,
-      reason: request.reasonSummary,
-      status:
-        request.status === "reviewed" ||
-        request.status === "accepted" ||
-        request.status === "rejected" ||
-        request.status === "cancelled"
-          ? request.status
-          : "pending",
-      requestedBy: request.requestedBy,
-      createdAt: request.createdAt ?? "",
-      updatedAt: request.updatedAt ?? request.createdAt ?? "",
-    }
-  })
+      return effectiveActiveRequests.get(request.productId)?.id === request.id
+    })
+    .sort(
+      (first, second) =>
+        new Date(second.updatedAt ?? second.createdAt ?? 0).getTime() -
+        new Date(first.updatedAt ?? first.createdAt ?? 0).getTime()
+    )
+    .map((request) => {
+      const product = productById.get(request.productId)
+
+      return {
+        id: request.id,
+        productSku: product?.sku ?? request.productId,
+        productName: product?.name ?? "Unknown product",
+        workflowId: request.workflowId ?? undefined,
+        targetPriceMin:
+          request.targetPriceMin == null ? undefined : Number(request.targetPriceMin),
+        targetPriceMax:
+          request.targetPriceMax == null ? undefined : Number(request.targetPriceMax),
+        requestedThreshold: request.requestedThreshold ?? undefined,
+        requestedQuantity: request.requestedQuantity ?? undefined,
+        reason: request.reasonSummary,
+        status:
+          request.status === "reviewed" ||
+          request.status === "accepted" ||
+          request.status === "rejected" ||
+          request.status === "cancelled"
+            ? request.status
+            : "pending",
+        requestedBy: request.requestedBy,
+        createdAt: request.createdAt ?? "",
+        updatedAt: request.updatedAt ?? request.createdAt ?? "",
+      }
+    })
 }
 
 function latestMessageForConversation(
@@ -1023,8 +1105,8 @@ function mapRestockRecommendations(
   const suppliers = mapSuppliers(rows.suppliers)
   const products = mapProducts(rows)
   const productById = new Map(products.map((product) => [product.id, product]))
-  const visibleRequests = rows.restockRequests.filter((request) =>
-    ["pending", "reviewed", "accepted"].includes(request.status)
+  const visibleRequests = Array.from(
+    selectEffectiveActiveRestockRequests(rows).values()
   )
 
   return visibleRequests.flatMap((restockRequest) => {
@@ -1032,18 +1114,26 @@ function mapRestockRecommendations(
     if (!product) return []
 
     const supplier = suppliers.find((item) => item.id === product.supplierId)
-    const workflow = rows.workflows
-      .filter((item) => item.productId === product.id)
-      .sort(
-        (first, second) =>
-          new Date(second.updatedAt ?? second.createdAt ?? 0).getTime() -
-          new Date(first.updatedAt ?? first.createdAt ?? 0).getTime()
-      )[0]
+    const workflow = restockRequest.workflowId
+      ? rows.workflows.find((item) => item.id === restockRequest.workflowId)
+      : undefined
+    const requestTargetPriceMin =
+      restockRequest.targetPriceMin == null
+        ? undefined
+        : Number(restockRequest.targetPriceMin)
+    const requestTargetPriceMax =
+      restockRequest.targetPriceMax == null
+        ? undefined
+        : Number(restockRequest.targetPriceMax)
     const quantity =
       restockRequest?.requestedQuantity ??
       workflow?.quantity ??
       Math.max(product.currentThreshold - product.stockOnHand, product.currentThreshold)
-    const unitPrice = workflow?.targetPriceMax ?? product.unitCost
+    const unitPrice =
+      workflow?.targetPriceMax ??
+      requestTargetPriceMax ??
+      requestTargetPriceMin ??
+      product.unitCost
 
     return {
       id: `restock-${product.id}`,
@@ -1061,7 +1151,10 @@ function mapRestockRecommendations(
           : "Approaching current threshold or grouped for restock."),
       currentStock: product.stockOnHand,
       currentThreshold: product.currentThreshold,
-      targetPrice: formatMoneyRange(workflow?.targetPriceMin, workflow?.targetPriceMax),
+      targetPrice: formatMoneyRange(
+        workflow?.targetPriceMin ?? requestTargetPriceMin,
+        workflow?.targetPriceMax ?? requestTargetPriceMax
+      ),
       quantity,
       estimatedSpend: formatSpend(quantity * unitPrice),
       automationPlan: [
@@ -1107,6 +1200,34 @@ export async function getRestockRecommendations(): Promise<RestockRecommendation
 export async function getRestockRequests(): Promise<RestockRequest[]> {
   const rows = await getDomainRows()
   return mapRestockRequests(rows)
+}
+
+export async function getLatestWorkflowStateByProductId(): Promise<
+  Record<string, WorkflowState | undefined>
+> {
+  const rows = await getDomainRows()
+  const latestByProductId = new Map<string, RawWorkflow>()
+
+  rows.workflows
+    .slice()
+    .sort(
+      (first, second) =>
+        new Date(second.updatedAt ?? second.createdAt ?? 0).getTime() -
+        new Date(first.updatedAt ?? first.createdAt ?? 0).getTime()
+    )
+    .forEach((workflow) => {
+      if (!workflow.productId || latestByProductId.has(workflow.productId)) {
+        return
+      }
+      latestByProductId.set(workflow.productId, workflow)
+    })
+
+  return Object.fromEntries(
+    Array.from(latestByProductId.entries()).map(([productId, workflow]) => [
+      productId,
+      workflow.currentState as WorkflowState,
+    ])
+  )
 }
 
 export async function getThresholdChangeRequests(): Promise<ThresholdChangeRequest[]> {
@@ -1339,7 +1460,9 @@ export async function getThresholdAnalysisBySku(): Promise<
 
   return Object.fromEntries(
     products.map((product) => {
-      const request = thresholdRequests.find((item) => item.productSku === product.sku)
+      const request = thresholdRequests.find(
+        (item) => item.productSku === product.sku && item.status === "pending"
+      )
 
       return [
         product.sku,
