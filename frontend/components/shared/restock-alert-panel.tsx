@@ -23,7 +23,7 @@ export function RestockAlertPanel({
     () => new Set()
   )
   const visibleRecommendations = recommendations.filter(
-    (item) => !dismissedIds.has(item.id)
+    (item) => !dismissedIds.has(item.id) && isActionableRestock(item)
   )
 
   if (visibleRecommendations.length === 0) {
@@ -119,6 +119,37 @@ export function RestockAlertPanel({
       </CardContent>
     </Card>
   )
+}
+
+function isActionableRestock(item: RestockRecommendation) {
+  if (
+    [
+      "po_sent",
+      "waiting_supplier",
+      "invoice_processing",
+      "ready_for_approval",
+      "completed",
+    ].includes(item.workflowState ?? "")
+  ) {
+    return false
+  }
+
+  if (
+    item.restockRequestStatus === "pending" ||
+    item.restockRequestStatus === "reviewed"
+  ) {
+    return true
+  }
+
+  if (
+    item.restockRequestStatus === "accepted" ||
+    item.restockRequestStatus === "rejected" ||
+    item.restockRequestStatus === "cancelled"
+  ) {
+    return false
+  }
+
+  return item.workflowState !== "blocked"
 }
 
 function parseSpend(value: string) {

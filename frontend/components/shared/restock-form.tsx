@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 import { motion } from "motion/react"
 import { useRouter } from "next/navigation"
-import { Fragment, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
@@ -28,10 +28,10 @@ import type {
 import { cn } from "@/lib/utils"
 
 const WORKFLOW_STEPS = [
-  "Analyze trends",
+  "Read stock",
   "Prepare supplier",
   "Send order",
-  "Supplier reply",
+  "Negotiation process",
   "Invoice",
   "Approval",
 ] as const
@@ -45,6 +45,8 @@ const WORKFLOW_STATE_TO_STEP_INDEX: Partial<Record<WorkflowState, number>> = {
   ready_for_approval: 5,
   completed: WORKFLOW_STEPS.length,
 }
+
+const START_ANIMATION_DELAY_MS = 850
 
 type RestockFormProps = {
   recommendation: RestockRecommendation
@@ -68,23 +70,25 @@ export function RestockForm({
   const [committed, setCommitted] = useState(draft)
   const [optimisticWorkflowState, setOptimisticWorkflowState] =
     useState<WorkflowState>()
+  const [animatedActiveStep, setAnimatedActiveStep] = useState<number>()
   const [isStartingWorkflow, setIsStartingWorkflow] = useState(false)
   const [actionError, setActionError] = useState<string>()
 
-  const thresholdDeficit = product.stockOnHand - product.aiThreshold
+  const thresholdDeficit = product.stockOnHand - product.currentThreshold
   const leadTime = supplier?.leadTimeDays ?? 0
 
   const fields = isEditing ? draft : committed
   const displayWorkflowState =
     optimisticWorkflowState ?? recommendation.workflowState
-  const activeStep =
+  const mappedActiveStep =
     displayWorkflowState == null
       ? undefined
       : WORKFLOW_STATE_TO_STEP_INDEX[displayWorkflowState]
+  const activeStep = animatedActiveStep ?? mappedActiveStep
   const workflowStarted =
     displayWorkflowState != null &&
     displayWorkflowState !== "threshold_review" &&
-    activeStep != null
+    mappedActiveStep != null
   const waitingStepIndex =
     displayWorkflowState === "waiting_supplier"
       ? WORKFLOW_STATE_TO_STEP_INDEX.waiting_supplier
@@ -93,6 +97,23 @@ export function RestockForm({
   const automationPlan = useMemo(() => recommendation.automationPlan, [
     recommendation.automationPlan,
   ])
+
+  useEffect(() => {
+    if (animatedActiveStep == null) return
+
+    const timer = window.setTimeout(() => {
+      if (animatedActiveStep < 2) {
+        setAnimatedActiveStep((current) =>
+          current == null ? current : Math.min(current + 1, 2)
+        )
+      } else {
+        setAnimatedActiveStep(undefined)
+        router.refresh()
+      }
+    }, START_ANIMATION_DELAY_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [animatedActiveStep, router])
 
   function handleSave() {
     setCommitted(draft)
@@ -120,8 +141,8 @@ export function RestockForm({
     })
 
     if (result.ok) {
-      setOptimisticWorkflowState("supplier_prep")
-      router.refresh()
+      setOptimisticWorkflowState("po_sent")
+      setAnimatedActiveStep(0)
     } else {
       setActionError(result.message ?? "Unable to start restock workflow.")
     }
@@ -155,6 +176,12 @@ export function RestockForm({
             <div>
               <div className="flex items-center gap-2">
                 <StatusBadge label="Restock detected" tone="ai" />
+                {recommendation.restockRequestStatus ? (
+                  <StatusBadge
+                    label={`Request ${recommendation.restockRequestStatus}`}
+                    tone="default"
+                  />
+                ) : null}
                 <span className="text-[12px] text-[#9CA3AF]">
                   Conversation ID · {recommendation.conversationId}
                 </span>
@@ -181,7 +208,10 @@ export function RestockForm({
           <SectionLabel>Stock context</SectionLabel>
           <div className="mt-2 grid grid-cols-4 gap-3">
             <StaticMetric label="Current Stock" value={product.stockOnHand} />
-            <StaticMetric label="AI Threshold" value={product.aiThreshold} />
+            <StaticMetric
+              label="Current Threshold"
+              value={product.currentThreshold}
+            />
             <StaticMetric
               label="Deficit vs. Threshold"
               value={`${thresholdDeficit > 0 ? "+" : ""}${thresholdDeficit}`}
@@ -460,7 +490,7 @@ export function CompactWorkflowProgress({
                         ease: "easeInOut",
                       }}
                     />
-                    Waiting for supplier response…
+                    Negotiation in progress…
                   </p>
                 ) : null}
               </div>

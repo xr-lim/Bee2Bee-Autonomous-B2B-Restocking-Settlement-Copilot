@@ -84,6 +84,9 @@ export default async function DashboardPage() {
   const activeInvoices = invoices.filter((invoice) =>
     ["Waiting Approval", "Needs Review", "Blocked"].includes(invoice.approvalState)
   )
+  const actionableRestocks = restockRecommendations.filter((item) =>
+    isActionableRestock(item)
+  )
 
   return (
     <>
@@ -109,11 +112,11 @@ export default async function DashboardPage() {
         <div className="space-y-6">
           <CollapsibleSection
             title="Restock Queue"
-            description="SKUs below AI threshold · ordered by urgency."
+            description="SKUs below current threshold · ordered by urgency."
             headerAccessory={
               <StatusBadge
-                label={`${restockRecommendations.length} items`}
-                tone={restockRecommendations.length > 0 ? "warning" : "default"}
+                label={`${actionableRestocks.length} items`}
+                tone={actionableRestocks.length > 0 ? "warning" : "default"}
               />
             }
             defaultOpen
@@ -130,8 +133,8 @@ export default async function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {restockRecommendations.map((item) => {
-                  const belowThreshold = item.currentStock < item.aiThreshold
+                {actionableRestocks.map((item) => {
+                  const belowThreshold = item.currentStock < item.currentThreshold
 
                   return (
                     <TableRow
@@ -161,7 +164,7 @@ export default async function DashboardPage() {
                             {item.currentStock}
                           </span>
                           <span className="text-[13px] text-[#6B7280]">
-                            / {item.aiThreshold}
+                            / {item.currentThreshold}
                           </span>
                         </div>
                       </TableCell>
@@ -263,7 +266,7 @@ export default async function DashboardPage() {
             <CardContent className="p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-[17px] font-semibold text-[#E5E7EB]">
-                  AI Threshold Insight
+                  Threshold Insight
                 </h3>
                 <Bot className="size-5 text-[#8B5CF6]" aria-hidden="true" />
               </div>
@@ -303,5 +306,26 @@ export default async function DashboardPage() {
         hideMonthlyDemand
       />
     </>
+  )
+}
+
+function isActionableRestock(
+  item: Awaited<ReturnType<typeof getRestockRecommendations>>[number]
+) {
+  if (
+    [
+      "po_sent",
+      "waiting_supplier",
+      "invoice_processing",
+      "ready_for_approval",
+      "completed",
+    ].includes(item.workflowState ?? "")
+  ) {
+    return false
+  }
+
+  return (
+    item.restockRequestStatus === "pending" ||
+    item.restockRequestStatus === "reviewed"
   )
 }
