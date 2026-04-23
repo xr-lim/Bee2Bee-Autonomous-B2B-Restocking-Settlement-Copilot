@@ -309,7 +309,7 @@ class ThresholdChangeRequestInput(BaseModel):
     old_threshold: int | None = Field(
         default=None,
         ge=0,
-        description="Optional current threshold to store in the request. If omitted, the tool uses the product's current AI threshold.",
+        description="Optional current threshold to store in the request. If omitted, the tool uses the product's current threshold.",
     )
     requested_by: str | None = Field(
         default=None,
@@ -518,9 +518,7 @@ def _get_product_stock_and_target_price_impl(sku: str) -> dict[str, Any]:
                 "category": product["category"],
                 "current_stock": int(product["current_stock"]),
                 "unit_price": float(product["unit_price"]),
-                "static_threshold": int(product["static_threshold"]),
-                "ai_threshold": int(product["ai_threshold"]),
-                "threshold_buffer": int(product["threshold_buffer"]),
+                "current_threshold": int(product["current_threshold"]),
                 "status": product["status"],
                 "primary_supplier_id": product["primary_supplier_id"],
             },
@@ -575,7 +573,7 @@ def _request_reorder_threshold_update_impl(
 
     with session_scope() as session:
         product = _resolve_product(session, sku)
-        current_threshold = int(old_threshold if old_threshold is not None else product["ai_threshold"])
+        current_threshold = int(old_threshold if old_threshold is not None else product["current_threshold"])
         request_id = f"thr-{uuid.uuid4().hex[:12]}"
 
         insert_stmt = (
@@ -610,7 +608,7 @@ def _request_reorder_threshold_update_impl(
             "product": {
                 "sku": product["sku"],
                 "name": product["name"],
-                "current_ai_threshold": int(product["ai_threshold"]),
+                "current_threshold": int(product["current_threshold"]),
             },
         }
 
@@ -637,7 +635,7 @@ def request_reorder_threshold_update(
     - lead time shifts or supplier instability require a larger safety margin,
     - the AI wants to propose a threshold review for a human approver.
 
-    Do not use it to silently update products.ai_threshold. This tool records the
+    Do not use it to silently update products.current_threshold. This tool records the
     review request only.
     """
 
@@ -677,8 +675,7 @@ def _get_supplier_info_impl(
                 products.c.name,
                 products.c.category,
                 products.c.current_stock,
-                products.c.ai_threshold,
-                products.c.static_threshold,
+                products.c.current_threshold,
                 products.c.status,
                 products.c.unit_price,
                 product_suppliers.c.is_primary,
@@ -702,7 +699,7 @@ def _get_supplier_info_impl(
                     "sku": row["sku"],
                     "name": row["name"],
                     "current_stock": int(row["current_stock"]),
-                    "ai_threshold": int(row["ai_threshold"]),
+                    "current_threshold": int(row["current_threshold"]),
                     "status": row["status"],
                     "is_primary": bool(row["is_primary"]),
                 }
@@ -1219,9 +1216,7 @@ def _get_product_operational_context_impl(sku: str) -> dict[str, Any]:
                 "name": product["name"],
                 "category": product["category"],
                 "current_stock": int(product["current_stock"]),
-                "static_threshold": int(product["static_threshold"]),
-                "ai_threshold": int(product["ai_threshold"]),
-                "threshold_buffer": int(product["threshold_buffer"]),
+                "current_threshold": int(product["current_threshold"]),
                 "status": product["status"],
             },
             "supplier": {

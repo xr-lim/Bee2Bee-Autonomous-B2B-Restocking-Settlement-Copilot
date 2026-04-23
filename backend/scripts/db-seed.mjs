@@ -23,6 +23,7 @@ const TABLE_CONFIG = [
   { name: "conversation_products", conflictKey: "id", jsonbCols: [] },
   { name: "conversation_messages", conflictKey: "id", jsonbCols: [] },
   { name: "workflows", conflictKey: "id", jsonbCols: [] },
+  { name: "restock_requests", conflictKey: "id", jsonbCols: [] },
   { name: "workflow_events", conflictKey: "id", jsonbCols: [] },
   { name: "invoices", conflictKey: "id", jsonbCols: [] },
   { name: "invoice_products", conflictKey: "id", jsonbCols: [] },

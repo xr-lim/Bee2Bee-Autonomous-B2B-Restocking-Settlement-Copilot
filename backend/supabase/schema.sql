@@ -13,6 +13,7 @@ drop table if exists public.invoice_validation_results cascade;
 drop table if exists public.invoice_products cascade;
 drop table if exists public.invoices cascade;
 drop table if exists public.workflow_events cascade;
+drop table if exists public.restock_requests cascade;
 drop table if exists public.workflows cascade;
 drop table if exists public.conversation_messages cascade;
 drop table if exists public.conversation_products cascade;
@@ -54,10 +55,8 @@ create table public.products (
   category text not null,
   current_stock integer not null check (current_stock >= 0),
   unit_price numeric(12, 2) not null check (unit_price >= 0),
-  static_threshold integer not null check (static_threshold >= 0),
-  ai_threshold integer not null check (ai_threshold >= 0),
+  current_threshold integer not null check (current_threshold >= 0),
   max_capacity integer not null check (max_capacity >= 0),
-  threshold_buffer integer not null default 0 check (threshold_buffer >= 0),
   status text not null check (
     status in (
       'healthy',
@@ -198,6 +197,27 @@ create table public.workflows (
   updated_at timestamptz not null default now()
 );
 
+create table public.restock_requests (
+  id text primary key,
+  product_id text not null references public.products(id) on delete cascade,
+  workflow_id text references public.workflows(id) on delete set null,
+  requested_threshold integer check (
+    requested_threshold is null or requested_threshold >= 0
+  ),
+  requested_quantity integer check (
+    requested_quantity is null or requested_quantity >= 0
+  ),
+  reason_summary text not null,
+  status text not null check (
+    status in ('pending', 'reviewed', 'accepted', 'rejected', 'cancelled')
+  ),
+  requested_by text not null check (
+    requested_by in ('ai', 'merchant', 'system')
+  ),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table public.workflow_events (
   id text primary key,
   workflow_id text not null references public.workflows(id) on delete cascade,
@@ -321,6 +341,10 @@ create trigger set_workflows_updated_at
 before update on public.workflows
 for each row execute function public.set_updated_at();
 
+create trigger set_restock_requests_updated_at
+before update on public.restock_requests
+for each row execute function public.set_updated_at();
+
 create trigger set_invoices_updated_at
 before update on public.invoices
 for each row execute function public.set_updated_at();
@@ -347,6 +371,12 @@ create index idx_workflows_product_id
   on public.workflows (product_id);
 create index idx_workflows_conversation_id
   on public.workflows (conversation_id);
+create index idx_restock_requests_product_id
+  on public.restock_requests (product_id);
+create index idx_restock_requests_workflow_id
+  on public.restock_requests (workflow_id);
+create index idx_restock_requests_status
+  on public.restock_requests (status);
 create index idx_invoices_supplier_id
   on public.invoices (supplier_id);
 create index idx_invoices_workflow_id
