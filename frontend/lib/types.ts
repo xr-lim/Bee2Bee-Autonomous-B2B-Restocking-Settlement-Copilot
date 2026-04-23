@@ -275,6 +275,7 @@ export type RestockRecommendation = {
   sku: string
   workflowId?: string
   workflowState?: WorkflowState
+  workflowBlockedStepIndex?: number
   restockRequestId?: string
   restockRequestStatus?: RestockRequest["status"]
   productName: string

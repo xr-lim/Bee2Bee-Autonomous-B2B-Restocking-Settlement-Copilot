@@ -1134,12 +1134,19 @@ function mapRestockRecommendations(
       requestTargetPriceMax ??
       requestTargetPriceMin ??
       product.unitCost
+    const workflowBlockedStepIndex =
+      workflow?.currentState === "blocked"
+        ? workflow?.invoiceId || workflow?.approvalState === "blocked"
+          ? 4
+          : 2
+        : undefined
 
     return {
       id: `restock-${product.id}`,
       sku: product.sku,
       workflowId: workflow?.id,
       workflowState: workflow?.currentState as WorkflowState | undefined,
+      workflowBlockedStepIndex,
       restockRequestId: restockRequest?.id,
       restockRequestStatus: restockRequest?.status as RestockRequest["status"] | undefined,
       productName: product.name,

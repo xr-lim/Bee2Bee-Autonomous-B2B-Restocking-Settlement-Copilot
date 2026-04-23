@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  AlertTriangle,
   Bot,
   Check,
   Loader2,
@@ -92,20 +93,18 @@ export function RestockForm({
     [suppliers]
   )
   const supplierOptions = useMemo(() => {
-    const trackedIds = new Set([
-      product.supplierId,
-      ...(product.suppliers?.map((item) => item.supplierId) ?? []),
-    ])
+    const trackedIds = Array.from(
+      new Set([
+        product.supplierId,
+        ...(product.suppliers?.map((item) => item.supplierId) ?? []),
+      ])
+    )
 
-    return suppliers
-      .slice()
-      .sort((first, second) => {
-        const firstTracked = trackedIds.has(first.id) ? 0 : 1
-        const secondTracked = trackedIds.has(second.id) ? 0 : 1
-        if (firstTracked !== secondTracked) return firstTracked - secondTracked
-        return first.name.localeCompare(second.name)
-      })
-  }, [product.supplierId, product.suppliers, suppliers])
+    return trackedIds
+      .map((supplierId) => supplierLookup.get(supplierId))
+      .filter((item): item is Supplier => Boolean(item))
+      .sort((first, second) => first.name.localeCompare(second.name))
+  }, [product.supplierId, product.suppliers, supplierLookup])
 
   const fields = isEditing ? draft : committed
   const displaySupplier = supplierLookup.get(fields.supplierId) ?? supplier
@@ -115,14 +114,18 @@ export function RestockForm({
     optimisticRequestStatus ?? recommendation.restockRequestStatus
   const displayWorkflowState =
     optimisticWorkflowState ?? recommendation.workflowState
+  const isBlockedWorkflow = displayWorkflowState === "blocked"
   const mappedActiveStep =
-    displayWorkflowState == null
+    isBlockedWorkflow
+      ? recommendation.workflowBlockedStepIndex ?? 0
+      : displayWorkflowState == null
       ? undefined
       : WORKFLOW_STATE_TO_STEP_INDEX[displayWorkflowState]
   const activeStep = animatedActiveStep ?? mappedActiveStep
   const workflowStarted =
     displayWorkflowState != null &&
     displayWorkflowState !== "threshold_review" &&
+    displayWorkflowState !== "blocked" &&
     mappedActiveStep != null
   const waitingStepIndex =
     displayWorkflowState === "waiting_supplier"
@@ -264,7 +267,7 @@ export function RestockForm({
     setIsSavingRequest(false)
   }
 
-  const showCompactWorkflow = workflowStarted
+  const showCompactWorkflow = workflowStarted || isBlockedWorkflow
   const buttonLabel = isStartingWorkflow ? "Starting…" : "AI Restock"
 
   if (showCompactWorkflow) {
@@ -275,6 +278,7 @@ export function RestockForm({
         waitingStepIndex={waitingStepIndex}
         productName={recommendation.productName}
         conversationId={recommendation.conversationId}
+        blocked={isBlockedWorkflow}
       />
     )
   }
@@ -570,6 +574,7 @@ type CompactWorkflowProgressProps = {
   waitingStepIndex?: number
   productName?: string
   conversationId?: string
+  blocked?: boolean
 }
 
 export function CompactWorkflowProgress({
@@ -578,6 +583,7 @@ export function CompactWorkflowProgress({
   waitingStepIndex,
   productName,
   conversationId,
+  blocked = false,
 }: CompactWorkflowProgressProps) {
   return (
     <motion.section
@@ -594,7 +600,7 @@ export function CompactWorkflowProgress({
           />
           <div className="min-w-0">
             <p className="text-[14px] font-semibold leading-5 text-[#E5E7EB]">
-              Restock in Progress
+              {blocked ? "Restock Blocked" : "Restock in Progress"}
             </p>
             {productName ? (
               <p className="mt-0.5 truncate text-[12px] leading-4 text-[#9CA3AF]">
@@ -604,11 +610,23 @@ export function CompactWorkflowProgress({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2 text-[11px] text-[#9CA3AF]">
-          <Loader2
-            className="size-3 animate-spin text-[#8B5CF6]"
-            aria-hidden="true"
-          />
-          {conversationId ? `Conv · ${conversationId}` : "In progress"}
+          {blocked ? (
+            <>
+              <AlertTriangle
+                className="size-3 text-[#F59E0B]"
+                aria-hidden="true"
+              />
+              Blocked
+            </>
+          ) : (
+            <>
+              <Loader2
+                className="size-3 animate-spin text-[#8B5CF6]"
+                aria-hidden="true"
+              />
+              {conversationId ? `Conv · ${conversationId}` : "In progress"}
+            </>
+          )}
         </div>
       </div>
 
@@ -651,6 +669,14 @@ export function CompactWorkflowProgress({
                       }}
                     />
                     Negotiation in progress…
+                  </p>
+                ) : blocked && isActive ? (
+                  <p className="mt-1.5 flex items-center justify-center gap-1.5 whitespace-nowrap text-[12px] leading-4 text-[#FCD34D]">
+                    <AlertTriangle
+                      className="size-3 text-[#F59E0B]"
+                      aria-hidden="true"
+                    />
+                    Waiting for manual unblock
                   </p>
                 ) : null}
               </div>
