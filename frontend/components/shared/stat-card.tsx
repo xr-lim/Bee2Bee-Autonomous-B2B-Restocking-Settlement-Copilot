@@ -13,11 +13,11 @@ type StatCardProps = {
 }
 
 const toneClassName: Record<StatusTone, string> = {
-  default: "text-[#3B82F6] bg-[#3B82F6]/10",
-  success: "text-[#10B981] bg-[#10B981]/10",
-  warning: "text-[#F59E0B] bg-[#F59E0B]/10",
-  danger: "text-[#EF4444] bg-[#EF4444]/10",
-  ai: "text-[#8B5CF6] bg-[#8B5CF6]/10",
+  default: "text-[#7DD3FC] bg-[#38BDF8]/12 ring-1 ring-[#38BDF8]/15",
+  success: "text-[#6EE7B7] bg-[#10B981]/12 ring-1 ring-[#10B981]/15",
+  warning: "text-[#FCD34D] bg-[#F59E0B]/12 ring-1 ring-[#F59E0B]/15",
+  danger: "text-[#FDA4AF] bg-[#EF4444]/12 ring-1 ring-[#EF4444]/15",
+  ai: "text-[#FCD34D] bg-[#FACC15]/12 ring-1 ring-[#FACC15]/18",
 }
 
 export function StatCard({
@@ -28,19 +28,21 @@ export function StatCard({
   tone = "default",
 }: StatCardProps) {
   return (
-    <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-      <CardContent className="p-6">
+    <Card className="panel-surface rounded-3xl py-0 transition-transform duration-200 hover:-translate-y-0.5">
+      <CardContent className="p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[13px] font-medium text-[#9CA3AF]">{title}</p>
-            <p className="mt-3 text-[32px] font-semibold leading-none text-[#E5E7EB]">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#94A3B8]">
+              {title}
+            </p>
+            <p className="mt-3 text-[2rem] font-semibold leading-none text-[#F8FAFC] sm:text-[2.4rem]">
               {value}
             </p>
           </div>
           {Icon ? (
             <div
               className={cn(
-                "flex size-11 items-center justify-center rounded-[10px]",
+                "flex size-12 items-center justify-center rounded-2xl",
                 toneClassName[tone]
               )}
             >
@@ -49,7 +51,7 @@ export function StatCard({
           ) : null}
         </div>
         {change ? (
-          <p className="mt-4 text-[13px] text-[#9CA3AF]">{change}</p>
+          <p className="mt-4 text-[13px] leading-6 text-[#94A3B8]">{change}</p>
         ) : null}
       </CardContent>
     </Card>

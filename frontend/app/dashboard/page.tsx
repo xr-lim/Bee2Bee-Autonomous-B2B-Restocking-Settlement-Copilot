@@ -1,10 +1,16 @@
 import Link from "next/link"
 import {
   AlertTriangle,
+  ArrowRight,
   Bot,
+  CheckCircle2,
+  FileCheck2,
+  FileWarning,
   MessageSquareText,
-  ReceiptText,
-  SlidersHorizontal,
+  PackageCheck,
+  PackageSearch,
+  Receipt,
+  Sparkles,
 } from "lucide-react"
 
 import { PageHeader } from "@/components/layout/page-header"
@@ -25,7 +31,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  getDashboardKpis,
   getInsightCards,
   getInvoices,
   getRestockRecommendations,
@@ -35,13 +40,6 @@ import {
 import type { Invoice, StatusTone, Supplier } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
-
-const statIcons = [
-  AlertTriangle,
-  SlidersHorizontal,
-  MessageSquareText,
-  ReceiptText,
-]
 
 const approvalTone: Record<Invoice["approvalState"], StatusTone> = {
   "Waiting Approval": "ai",
@@ -70,14 +68,12 @@ function firstSentence(text: string) {
 
 export default async function DashboardPage() {
   const [
-    dashboardKpis,
     insightCards,
     invoices,
     suppliers,
     restockRecommendations,
     stockTrendData,
   ] = await Promise.all([
-    getDashboardKpis(),
     getInsightCards(),
     getInvoices(),
     getSuppliers(),
@@ -88,9 +84,52 @@ export default async function DashboardPage() {
   const activeInvoices = invoices.filter((invoice) =>
     ["Waiting Approval", "Needs Review", "Blocked"].includes(invoice.approvalState)
   )
+  const riskyInvoices = activeInvoices.filter(
+    (invoice) => invoice.riskLevel === "High Risk" || invoice.riskLevel === "Medium Risk"
+  )
   const actionableRestocks = restockRecommendations.filter((item) =>
     isActionableRestock(item)
   )
+  const pendingRestocks = restockRecommendations.filter((item) =>
+    item.restockRequestStatus === "pending" || item.restockRequestStatus === "reviewed"
+  )
+  const activeRestocks = restockRecommendations.filter(
+    (item) => item.restockRequestStatus === "accepted" && item.workflowState !== "completed"
+  )
+  const completedSettlements = invoices.filter(
+    (invoice) => invoice.approvalState === "Completed" || invoice.status === "paid"
+  )
+  const supplierReplyCount = insightCards.recentSupplierActivity.length
+  const kpiCards = [
+    {
+      title: "Low Stock Items",
+      value: actionableRestocks.length.toString(),
+      change: `${activeRestocks.length} already in active recovery flow`,
+      tone: actionableRestocks.length > 0 ? "warning" : "success",
+      icon: AlertTriangle,
+    },
+    {
+      title: "Pending Restock",
+      value: pendingRestocks.length.toString(),
+      change: `${restockRecommendations.length} total recommendations in play`,
+      tone: pendingRestocks.length > 0 ? "ai" : "success",
+      icon: PackageSearch,
+    },
+    {
+      title: "Supplier Replies",
+      value: supplierReplyCount.toString(),
+      change: "latest inbound messages ready for review",
+      tone: supplierReplyCount > 0 ? "default" : "success",
+      icon: MessageSquareText,
+    },
+    {
+      title: "Invoice Risks",
+      value: riskyInvoices.length.toString(),
+      change: `${activeInvoices.length} invoices still need action`,
+      tone: riskyInvoices.length > 0 ? "danger" : "success",
+      icon: FileWarning,
+    },
+  ]
 
   return (
     <>
@@ -98,21 +137,46 @@ export default async function DashboardPage() {
         eyebrow="Bee2Bee command center"
         title="Restock Control Center"
         description="Monitor stock health, supplier communication, invoice risk, and approval pipeline."
+        actions={
+          <>
+            <Button
+              asChild
+              variant="outline"
+              className="h-11 rounded-2xl border-[#334155] bg-[#101827]/70 px-4 text-[#E5E7EB] hover:border-[#38BDF8]/40 hover:bg-[#172033]"
+            >
+              <Link href="/conversations">
+                <MessageSquareText className="size-4" aria-hidden="true" />
+                Inbox
+              </Link>
+            </Button>
+            <Button
+              asChild
+              className="h-11 rounded-2xl bg-[#FACC15] px-4 font-semibold text-[#111827] hover:bg-[#EAB308]"
+            >
+              <Link href="#restock-queue">
+                <PackageCheck className="size-4" aria-hidden="true" />
+                Review Queue
+              </Link>
+            </Button>
+          </>
+        }
       />
 
-      <section className="grid grid-cols-4 gap-5">
-        {dashboardKpis.map((stat, index) => (
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {kpiCards.map((stat) => (
           <StatCard
             key={stat.title}
             title={stat.title}
             value={stat.value}
             tone={stat.tone}
-            icon={statIcons[index]}
+            icon={stat.icon}
+            change={stat.change}
           />
         ))}
       </section>
 
-      <section className="grid grid-cols-[1fr_340px] gap-8">
+      <section className="grid gap-6 lg:grid-cols-[3.5fr_minmax(340px,1fr)]">
+        {/* Main Content: Queues */}
         <div className="space-y-6">
           <div id="restock-queue">
             <CollapsibleSection
@@ -126,81 +190,83 @@ export default async function DashboardPage() {
               }
               defaultOpen
             >
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[#243047] hover:bg-transparent [&>th]:h-12 [&>th]:px-5 [&>th]:text-[13px] [&>th]:text-[#9CA3AF]">
-                    <TableHead>Product</TableHead>
-                    <TableHead>Supplier</TableHead>
-                    <TableHead>Stock / Threshold</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Target Price</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {actionableRestocks.map((item) => {
-                    const belowThreshold = item.currentStock < item.currentThreshold
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[#243047] hover:bg-transparent [&>th]:h-12 [&>th]:px-5 [&>th]:text-[13px] [&>th]:text-[#9CA3AF]">
+                      <TableHead>Product</TableHead>
+                      <TableHead>Supplier</TableHead>
+                      <TableHead>Stock / Threshold</TableHead>
+                      <TableHead>Quantity</TableHead>
+                      <TableHead>Target Price</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {actionableRestocks.map((item) => {
+                      const belowThreshold = item.currentStock < item.currentThreshold
 
-                    return (
-                      <TableRow
-                        key={item.id}
-                        className="border-[#243047] hover:bg-[#172033]/70 [&>td]:px-5 [&>td]:py-4"
-                      >
-                        <TableCell>
-                        <p className="text-[15px] font-medium text-[#E5E7EB]">
-                          {item.productName}
-                        </p>
-                        <div className="mt-1 flex items-center gap-2">
-                          <p className="font-mono text-[12px] text-[#6B7280]">
-                            {item.sku}
-                          </p>
-                          <StatusBadge
-                            label={restockQueueStatus(item).label}
-                            tone={restockQueueStatus(item).tone}
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-[14px] text-[#9CA3AF]">
-                        {item.supplier}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-baseline gap-1.5">
-                            <span
-                              className={
-                                belowThreshold
-                                  ? "text-[15px] font-semibold text-[#F87171]"
-                                  : "text-[15px] font-semibold text-[#E5E7EB]"
+                      return (
+                        <TableRow
+                          key={item.id}
+                          className="border-[#243047] hover:bg-[#172033]/70 [&>td]:px-5 [&>td]:py-4"
+                        >
+                          <TableCell>
+                            <p className="text-[15px] font-medium text-[#E5E7EB]">
+                              {item.productName}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2">
+                              <p className="font-mono text-[12px] text-[#6B7280]">
+                                {item.sku}
+                              </p>
+                              <StatusBadge
+                                label={restockQueueStatus(item).label}
+                                tone={restockQueueStatus(item).tone}
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-[14px] text-[#9CA3AF]">
+                            {item.supplier}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-baseline gap-1.5">
+                              <span
+                                className={
+                                  belowThreshold
+                                    ? "text-[15px] font-semibold text-[#F87171]"
+                                    : "text-[15px] font-semibold text-[#E5E7EB]"
+                                }
+                              >
+                                {item.currentStock}
+                              </span>
+                              <span className="text-[13px] text-[#6B7280]">
+                                / {item.currentThreshold}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-[15px] font-medium text-[#E5E7EB]">
+                            {item.quantity.toLocaleString("en-US")}
+                          </TableCell>
+                          <TableCell className="text-[14px] text-[#9CA3AF]">
+                            {item.targetPrice}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DashboardRestockRowActions
+                              sku={item.sku}
+                              requestId={item.restockRequestId}
+                              actionLabel={
+                                item.restockRequestStatus === "accepted"
+                                  ? "View restocking"
+                                  : "Review & restock"
                               }
-                            >
-                              {item.currentStock}
-                            </span>
-                            <span className="text-[13px] text-[#6B7280]">
-                              / {item.currentThreshold}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-[15px] font-medium text-[#E5E7EB]">
-                          {item.quantity.toLocaleString("en-US")}
-                        </TableCell>
-                        <TableCell className="text-[14px] text-[#9CA3AF]">
-                          {item.targetPrice}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DashboardRestockRowActions
-                            sku={item.sku}
-                            requestId={item.restockRequestId}
-                            actionLabel={
-                              item.restockRequestStatus === "accepted"
-                                ? "View restocking"
-                                : "Review & restock"
-                            }
-                          />
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </CollapsibleSection>
           </div>
 
@@ -215,103 +281,106 @@ export default async function DashboardPage() {
             }
             defaultOpen
           >
-            <Table>
-              <TableHeader>
-                <TableRow className="border-[#243047] hover:bg-transparent [&>th]:h-12 [&>th]:px-5 [&>th]:text-[13px] [&>th]:text-[#9CA3AF]">
-                  <TableHead>Invoice / Supplier</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Risk</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {activeInvoices.map((invoice) => (
-                  <TableRow
-                    key={invoice.id}
-                    className="border-[#243047] hover:bg-[#172033]/70 [&>td]:px-5 [&>td]:py-4"
-                  >
-                    <TableCell>
-                      <p className="text-[15px] font-medium text-[#E5E7EB]">
-                        {supplierName(suppliers, invoice.supplierId)}
-                      </p>
-                      <p className="mt-1 font-mono text-[12px] text-[#6B7280]">
-                        {invoice.id}
-                      </p>
-                    </TableCell>
-                    <TableCell className="text-[15px] font-medium text-[#E5E7EB]">
-                      {invoice.currency}{" "}
-                      {invoice.amount.toLocaleString("en-US")}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        label={invoice.approvalState}
-                        tone={approvalTone[invoice.approvalState]}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        label={invoice.riskLevel}
-                        tone={riskTone[invoice.riskLevel]}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        asChild
-                        variant="outline"
-                        className="h-9 rounded-[10px] border-[#243047] bg-[#172033] px-3 text-[13px] text-[#E5E7EB] hover:bg-[#243047]"
-                      >
-                        <Link href={`/invoice-management/${invoice.id}`}>
-                          Review
-                        </Link>
-                      </Button>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-[#243047] hover:bg-transparent [&>th]:h-12 [&>th]:px-5 [&>th]:text-[13px] [&>th]:text-[#9CA3AF]">
+                    <TableHead>Invoice / Supplier</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>State</TableHead>
+                    <TableHead>Risk</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {activeInvoices.map((invoice) => (
+                    <TableRow
+                      key={invoice.id}
+                      className="border-[#243047] hover:bg-[#172033]/70 [&>td]:px-5 [&>td]:py-4"
+                    >
+                      <TableCell>
+                        <p className="text-[15px] font-medium text-[#E5E7EB]">
+                          {supplierName(suppliers, invoice.supplierId)}
+                        </p>
+                        <p className="mt-1 font-mono text-[12px] text-[#6B7280]">
+                          {invoice.id}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-[15px] font-medium text-[#E5E7EB]">
+                        {invoice.currency}{" "}
+                        {invoice.amount.toLocaleString("en-US")}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          label={invoice.approvalState}
+                          tone={approvalTone[invoice.approvalState]}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          label={invoice.riskLevel}
+                          tone={riskTone[invoice.riskLevel]}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="h-10 rounded-2xl border-[#334155] bg-[#172033] px-3 text-[13px] font-semibold text-[#E5E7EB] hover:border-[#38BDF8]/40 hover:bg-[#1B2940]"
+                        >
+                          <Link href={`/invoice-management/${invoice.id}`}>
+                            <FileCheck2 className="size-4" aria-hidden="true" />
+                            Review
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CollapsibleSection>
         </div>
 
+        {/* Sidebar Content: Insights and Agent Controls */}
         <div className="space-y-6">
-          <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
+          <Card className="panel-surface rounded-3xl py-0">
             <CardContent className="p-6">
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-[17px] font-semibold text-[#E5E7EB]">
-                  Threshold Insight
-                </h3>
-                <Bot className="size-5 text-[#8B5CF6]" aria-hidden="true" />
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#FCD34D]">
+                    Threshold Insight
+                  </p>
+                  <h3 className="mt-2 text-[18px] font-semibold text-[#F8FAFC]">
+                    Reorder signal
+                  </h3>
+                </div>
+                <div className="rounded-2xl border border-[#FACC15]/20 bg-[#FACC15]/10 p-2.5">
+                  <Bot className="size-5 text-[#FCD34D]" aria-hidden="true" />
+                </div>
               </div>
-              <p className="text-[32px] font-semibold leading-none text-[#E5E7EB]">
+              <p className="text-[36px] font-semibold leading-none text-[#F8FAFC]">
                 {insightCards.thresholdRecommendation.value}
               </p>
-              <p className="mt-3 text-[14px] leading-6 text-[#9CA3AF]">
+              <p className="mt-3 text-[14px] leading-6 text-[#94A3B8]">
                 {firstSentence(insightCards.thresholdRecommendation.body)}
               </p>
             </CardContent>
           </Card>
 
-          <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-            <CardContent className="p-6">
-              <h3 className="text-[17px] font-semibold text-[#E5E7EB]">
-                Recent Supplier Activity
-              </h3>
-              <ul className="mt-4 space-y-3">
-                {insightCards.recentSupplierActivity.map((activity) => (
-                  <li
-                    key={activity}
-                    className="flex gap-2.5 text-[14px] leading-6 text-[#9CA3AF]"
-                  >
-                    <span className="mt-2 size-1.5 shrink-0 rounded-full bg-[#3B82F6]" />
-                    <span>{activity}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-            <CardContent className="flex flex-col gap-3 p-4">
+          <Card className="panel-surface rounded-3xl py-0">
+            <CardContent className="flex flex-col gap-4 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#7DD3FC]">
+                    Agent Controls
+                  </p>
+                  <h3 className="mt-2 text-[18px] font-semibold text-[#F8FAFC]">
+                    AI Analysis
+                  </h3>
+                </div>
+                <Sparkles className="size-5 text-[#7DD3FC]" aria-hidden="true" />
+              </div>
               <DashboardThresholdAnalysisButton />
             </CardContent>
           </Card>

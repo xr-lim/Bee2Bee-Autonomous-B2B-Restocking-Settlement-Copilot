@@ -377,30 +377,6 @@ async def run_threshold_analysis(
         trace: list[dict[str, Any]] = [
             _trace_event("backend", f"Selected {sku} for threshold analysis.")
         ]
-        existing_requests = list_threshold_change_requests_for_sku.invoke(
-            {"sku": sku, "status": "pending"}
-        )
-        pending_requests = existing_requests.get("requests", [])
-        if pending_requests:
-            trace.append(
-                _trace_event(
-                    "backend",
-                    "Skipped because a pending threshold request already exists.",
-                )
-            )
-            results.append(
-                {
-                    "sku": sku,
-                    "status": "skipped_existing_pending_request",
-                    "current_threshold": None,
-                    "proposed_threshold": None,
-                    "confidence": None,
-                    "detail": "A pending threshold change request already exists for this SKU.",
-                    "trace": trace,
-                }
-            )
-            continue
-
         current_snapshot = get_product_stock_and_target_price.invoke({"sku": sku})
         current_threshold = int(current_snapshot["product"]["current_threshold"])
         trace.append(
@@ -415,6 +391,31 @@ async def run_threshold_analysis(
             )
         )
 
+        existing_requests = list_threshold_change_requests_for_sku.invoke(
+            {"sku": sku, "status": "pending"}
+        )
+        pending_requests = existing_requests.get("requests", [])
+        if pending_requests:
+            trace.append(
+                _trace_event(
+                    "backend",
+                    "Skipped because a pending threshold request already exists.",
+                )
+            )
+            results.append(
+                {
+                    "sku": sku,
+                    "product_name": current_snapshot["product"]["name"],
+                    "status": "skipped_existing_pending_request",
+                    "current_threshold": None,
+                    "proposed_threshold": None,
+                    "confidence": None,
+                    "detail": "A pending threshold change request already exists for this SKU.",
+                    "trace": trace,
+                }
+            )
+            continue
+
         try:
             decision, agent_trace = await _run_threshold_analysis_agent_for_sku(sku)
             trace.extend(agent_trace)
@@ -428,6 +429,7 @@ async def run_threshold_analysis(
             results.append(
                 {
                     "sku": sku,
+                    "product_name": current_snapshot["product"]["name"],
                     "status": "analysis_failed",
                     "current_threshold": current_threshold,
                     "proposed_threshold": None,
@@ -448,6 +450,7 @@ async def run_threshold_analysis(
             results.append(
                 {
                     "sku": sku,
+                    "product_name": current_snapshot["product"]["name"],
                     "status": "no_change_recommended",
                     "current_threshold": current_threshold,
                     "proposed_threshold": proposed_threshold,
@@ -468,6 +471,7 @@ async def run_threshold_analysis(
             results.append(
                 {
                     "sku": sku,
+                    "product_name": current_snapshot["product"]["name"],
                     "status": "no_change_recommended",
                     "current_threshold": current_threshold,
                     "proposed_threshold": proposed_threshold,
@@ -504,6 +508,7 @@ async def run_threshold_analysis(
             results.append(
                 {
                     "sku": sku,
+                    "product_name": current_snapshot["product"]["name"],
                     "status": "analysis_failed",
                     "current_threshold": current_threshold,
                     "proposed_threshold": proposed_threshold,
@@ -526,6 +531,7 @@ async def run_threshold_analysis(
         results.append(
             {
                 "sku": sku,
+                "product_name": current_snapshot["product"]["name"],
                 "status": "request_created",
                 "current_threshold": current_threshold,
                 "proposed_threshold": proposed_threshold,

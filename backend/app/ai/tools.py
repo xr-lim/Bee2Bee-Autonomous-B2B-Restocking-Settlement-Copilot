@@ -497,6 +497,53 @@ class InvoiceActionInput(BaseModel):
         return self
 
 
+class RestockRequestInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    sku: str = Field(
+        ...,
+        min_length=1,
+        description="Exact product SKU to create a restock request for.",
+    )
+    workflow_id: str | None = Field(
+        default=None,
+        description="Optional active workflow ID to link this request to.",
+    )
+    requested_threshold: int | None = Field(
+        default=None,
+        ge=0,
+        description="Optional new reorder threshold proposed as part of this restock event.",
+    )
+    requested_quantity: int = Field(
+        ...,
+        ge=1,
+        description="The number of units recommended to restock.",
+    )
+    target_price_min: float = Field(
+        ...,
+        ge=0,
+        description="The lower bound of the target unit price range.",
+    )
+    target_price_max: float = Field(
+        ...,
+        ge=0,
+        description="The upper bound of the target unit price range.",
+    )
+    reason_summary: str = Field(
+        ...,
+        min_length=1,
+        description="A human-readable explanation of why this restock is needed (e.g. 'Stock below threshold', 'Seasonality spike').",
+    )
+    status: Literal["pending", "reviewed", "accepted", "rejected", "cancelled"] = Field(
+        default="pending",
+        description="The initial status of the restock request.",
+    )
+    requested_by: Literal["ai", "merchant", "system"] = Field(
+        default="ai",
+        description="Who is making the request.",
+    )
+
+
 def _get_product_stock_and_target_price_impl(sku: str) -> dict[str, Any]:
     products = table("products")
     workflows = table("workflows")
@@ -1447,6 +1494,91 @@ def record_invoice_action(
     )
 
 
+def _create_restock_request_impl(
+    sku: str,
+    requested_quantity: int,
+    target_price_min: float,
+    target_price_max: float,
+    reason_summary: str,
+    workflow_id: str | None = None,
+    requested_threshold: int | None = None,
+    status: str = "pending",
+    requested_by: str = "ai",
+) -> dict[str, Any]:
+    restock_requests = table("restock_requests")
+
+    with session_scope() as session:
+        product = _resolve_product(session, sku)
+        request_id = f"rr-{uuid.uuid4().hex[:12]}"
+
+        insert_stmt = (
+            insert(restock_requests)
+            .values(
+                id=request_id,
+                product_id=product["id"],
+                workflow_id=workflow_id,
+                target_price_min=target_price_min,
+                target_price_max=target_price_max,
+                requested_threshold=requested_threshold,
+                requested_quantity=requested_quantity,
+                reason_summary=reason_summary,
+                status=status,
+                requested_by=requested_by,
+            )
+            .returning(*restock_requests.c)
+        )
+        created_request = session.execute(insert_stmt).mappings().one()
+        session.commit()
+
+        return {
+            "success": True,
+            "restock_request_id": created_request["id"],
+            "sku": product["sku"],
+            "product_name": product["name"],
+            "requested_quantity": int(created_request["requested_quantity"]),
+            "target_price_min": float(created_request["target_price_min"]),
+            "target_price_max": float(created_request["target_price_max"]),
+            "status": created_request["status"],
+        }
+
+
+@tool("create_restock_request", args_schema=RestockRequestInput)
+def create_restock_request(
+    sku: str,
+    requested_quantity: int,
+    target_price_min: float,
+    target_price_max: float,
+    reason_summary: str,
+    workflow_id: str | None = None,
+    requested_threshold: int | None = None,
+    status: str = "pending",
+    requested_by: str = "ai",
+) -> dict[str, Any]:
+    """Create a formal restock request in the database.
+
+    Use this tool when the agent has decided that a product needs restocking.
+    The tool inserts a record into the restock_requests table.
+
+    It should be used after the agent has reasoned about:
+    - the quantity to order (based on stock, capacity, and MOQ),
+    - the target price range (based on history or trends).
+    """
+
+    return _json_ready(
+        _create_restock_request_impl(
+            sku=sku,
+            requested_quantity=requested_quantity,
+            target_price_min=target_price_min,
+            target_price_max=target_price_max,
+            reason_summary=reason_summary,
+            workflow_id=workflow_id,
+            requested_threshold=requested_threshold,
+            status=status,
+            requested_by=requested_by,
+        )
+    )
+
+
 RECOMMENDED_RESTOCK_TOOLS = [
     "get_product_stock_and_target_price",
     "get_product_stock_demand_trend",
@@ -1458,6 +1590,7 @@ RECOMMENDED_RESTOCK_TOOLS = [
     "list_threshold_change_requests_for_sku",
     "record_invoice_validation_result",
     "record_invoice_action",
+    "create_restock_request",
 ]
 
 

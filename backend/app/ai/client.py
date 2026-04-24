@@ -17,7 +17,10 @@ from app.core.config import (
 
 
 def _messages_endpoint() -> str:
-    return f"{ANTHROPIC_BASE_URL.rstrip('/')}/v1/messages"
+    base_url = ANTHROPIC_BASE_URL.rstrip("/")
+    if base_url.endswith("/v1"):
+        return f"{base_url}/messages"
+    return f"{base_url}/v1/messages"
 
 
 def is_ai_configured() -> bool:
@@ -61,6 +64,7 @@ async def create_message(
         "max_tokens": max_tokens or AI_MAX_TOKENS,
         "temperature": AI_TEMPERATURE if temperature is None else temperature,
         "messages": payload_messages,
+        "stream": False,
     }
     if system_prompt is not None:
         payload["system"] = system_prompt
@@ -71,19 +75,59 @@ async def create_message(
 
     async with httpx.AsyncClient(timeout=AI_TIMEOUT_SECONDS) as client:
         response = await client.post(_messages_endpoint(), headers=headers, json=payload)
+        if response.status_code != 200:
+            print("AI STATUS CODE:", response.status_code)
+            print("AI RESPONSE TEXT:", response.text)
         response.raise_for_status()
-        return response.json()
+        response_json = response.json()
+        print("FULL AI RESPONSE:", response_json)
+        return response_json
 
 
 def messages_endpoint() -> str:
     return _messages_endpoint()
 
 
-def extract_text(message_response: dict[str, Any]) -> str:
+def extract_ai_text(message_response: dict[str, Any]) -> str:
+    output_text = message_response.get("output_text")
+    if isinstance(output_text, str):
+        return output_text.strip()
+
+    if isinstance(message_response.get("choices"), list):
+        choices = message_response.get("choices") or []
+        if choices:
+            message = choices[0].get("message", {})
+            content = message.get("content")
+            if isinstance(content, str):
+                return content.strip()
+            if isinstance(content, list):
+                text_parts = []
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "text" and isinstance(block.get("text"), str):
+                            text_parts.append(block["text"].strip())
+                        elif isinstance(block.get("content"), str):
+                            text_parts.append(block["content"].strip())
+                return "\n\n".join(part for part in text_parts if part).strip()
+
     blocks = message_response.get("content", [])
+    if isinstance(blocks, str):
+        return blocks.strip()
+
+    if isinstance(blocks, list) and blocks:
+        first_block = blocks[0]
+        if isinstance(first_block, dict):
+            first_text = first_block.get("text")
+            if isinstance(first_text, str) and first_text.strip():
+                return first_text.strip()
+
     text_parts = [
         block.get("text", "").strip()
         for block in blocks
         if isinstance(block, dict) and block.get("type") == "text"
     ]
     return "\n\n".join(part for part in text_parts if part).strip()
+
+
+def extract_text(message_response: dict[str, Any]) -> str:
+    return extract_ai_text(message_response)

@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from app.ai.client import is_ai_configured
 from app.ai.service import generate_copilot_response
 from app.ai.threshold_analysis import run_threshold_analysis
+from app.ai.restock_analysis import run_restock_analysis
 from app.core.config import ANTHROPIC_BASE_URL, ANTHROPIC_MODEL
 
 
@@ -76,6 +77,22 @@ async def threshold_analysis(payload: ThresholdAnalysisRequest):
 
     try:
         return await run_threshold_analysis(skus=payload.skus, limit=payload.limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/restock-analysis/run")
+async def restock_analysis():
+    if not is_ai_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="AI model is not configured. Add ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY to backend/.env.",
+        )
+
+    try:
+        return await run_restock_analysis()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
