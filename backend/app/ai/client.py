@@ -24,7 +24,6 @@ from app.core.config import (
 
 logger = logging.getLogger(__name__)
 
-
 def _messages_endpoint() -> str:
     if AI_PROVIDER == "gemini":
         return f"{GEMINI_BASE_URL.rstrip('/')}/chat/completions"
@@ -381,7 +380,6 @@ async def create_message(
         is_ai_configured(),
         masked_ai_secret(),
     )
-
     for attempt in range(2):
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:

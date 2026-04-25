@@ -9,7 +9,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import {
   getConversations,
   getInvoices,
-  getNegotiationMessages,
   getProducts,
   getSuppliers,
 } from "@/lib/data"
@@ -28,14 +27,12 @@ export default async function ConversationDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const [conversations, invoices, messagesAll, products, suppliers] =
-    await Promise.all([
-      getConversations(),
-      getInvoices(),
-      getNegotiationMessages(),
-      getProducts(),
-      getSuppliers(),
-    ])
+  const [conversations, invoices, products, suppliers] = await Promise.all([
+    getConversations(),
+    getInvoices(),
+    getProducts(),
+    getSuppliers(),
+  ])
 
   const conversation = conversations.find((item) => item.id === id)
 
@@ -49,9 +46,6 @@ export default async function ConversationDetailPage({
   const linkedProducts = conversation.linkedSkus
     .map((sku) => products.find((product) => product.sku === sku))
     .filter((product): product is Product => Boolean(product))
-  const messages = messagesAll.filter(
-    (item) => item.conversationId === conversation.id
-  )
   const linkedInvoice = invoices.find((invoice) =>
     conversation.linkedSkus.includes(invoice.productSku)
   )
@@ -100,7 +94,6 @@ export default async function ConversationDetailPage({
         conversation={conversation}
         supplier={supplier}
         linkedProducts={linkedProducts}
-        messages={messages}
         invoicesById={invoicesById}
         linkedInvoice={linkedInvoice}
       />

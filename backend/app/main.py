@@ -11,11 +11,7 @@ from app.db.session import SessionLocal
 from app.models.message import Message
 
 from app.api.v1.api import api_router
-
-try:
-    import socketio
-except ModuleNotFoundError:
-    socketio = None
+from app.realtime import sio, socketio
 
 try:
     import multipart  # type: ignore
@@ -26,13 +22,6 @@ if multipart is not None:
     from fastapi import File, UploadFile
 
 logging.basicConfig(level=logging.INFO, filename="app.log", filemode="a", format='%(asctime)s - %(message)s')
-
-# Socket.IO setup
-sio = (
-    socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
-    if socketio is not None
-    else None
-)
 
 app = FastAPI(
     title="B2B Restocking Copilot API",
@@ -99,7 +88,7 @@ if sio is not None:
     async def join_room_event(sid, data):
         room_id = data.get("room_id")
         role = data.get("role")
-        sio.enter_room(sid, room_id)
+        await sio.enter_room(sid, room_id)
         logging.info(f"Socket {sid} ({role}) joined room {room_id}")
         
         # Send chat history to the newly connected client from the database

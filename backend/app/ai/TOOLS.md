@@ -28,6 +28,10 @@ If that succeeds, the module can connect to the database and execute tool calls.
 | `get_product_operational_context` | Returns the minimal decision context for a product before changing workflows, thresholds, or invoice state. | `python -c "from app.ai.tools import get_product_operational_context; print(get_product_operational_context.invoke({'sku': 'SKU-ALM-8842'}))"` |
 | `list_threshold_change_requests_for_sku` | Lists threshold review requests for a SKU, optionally filtered by status. | `python -c "from app.ai.tools import list_threshold_change_requests_for_sku; print(list_threshold_change_requests_for_sku.invoke({'sku': 'SKU-ALM-8842'}))"` |
 | `record_invoice_action` | Writes an audit trail entry for an invoice action such as parsed, validated, or flagged. | `python -c "from app.ai.tools import record_invoice_action; print(record_invoice_action.invoke({'invoice_number': 'REPLACE_WITH_INVOICE_NUMBER','action_type': 'validated','note': 'Invoice passed core checks and is ready for review.','actor_type': 'ai'}))"` |
+| `get_restock_context` | Fetches context for a restock request including target prices and product details. | `python -c "from app.ai.tools import get_restock_context; print(get_restock_context.invoke({'request_id': 'REPLACE_WITH_REQUEST_ID'}))"` |
+| `update_conversation_state` | Updates the state and latest message of a conversation during negotiation. | `python -c "from app.ai.tools import update_conversation_state; print(update_conversation_state.invoke({'conversation_id': 'REPLACE_WITH_CONVERSATION_ID','new_state': 'accepted','message': 'Order confirmed at final price.'}))"` |
+| `create_final_order` | Creates a final confirmed order after successful negotiation with a supplier. | `python -c "from app.ai.tools import create_final_order; print(create_final_order.invoke({'restock_request_id': 'REPLACE_WITH_REQUEST_ID','supplier_id': 'REPLACE_WITH_SUPPLIER_ID','final_price': 15.50,'final_qty': 100}))"` |
+| `record_invoice` | Records a new invoice from an uploaded file, linking it to an order for validation. | `python -c "from app.ai.tools import record_invoice; print(record_invoice.invoke({'order_id': 'REPLACE_WITH_ORDER_ID','amount': 1550.00,'invoice_number': 'INV-2024-001','file_url': 'https://example.com/invoice.pdf'}))"` |
 
 ## Recommended Smoke Test Order
 
@@ -35,6 +39,7 @@ If that succeeds, the module can connect to the database and execute tool calls.
 2. Test `get_product_stock_demand_trend` next to confirm the trend table is available.
 3. Test `get_supplier_info` and `get_receipt_info` to confirm relational joins work.
 4. Test the write tools last: `request_reorder_threshold_update`, `record_invoice_validation_result`, and `record_invoice_action`.
+5. Test the new negotiation tools: `get_restock_context`, `update_conversation_state`, `create_final_order`, and `record_invoice`.
 
 ## Notes
 

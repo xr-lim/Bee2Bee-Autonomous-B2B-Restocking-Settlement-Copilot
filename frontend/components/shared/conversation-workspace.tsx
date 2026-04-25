@@ -3,7 +3,6 @@
 import Link from "next/link"
 import {
   Bot,
-  CircleStop,
   FileImage,
   FileText,
   ImageIcon,
@@ -18,8 +17,8 @@ import {
   ZoomIn,
 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
-import { useCallback, useMemo, useState, useEffect } from "react"
-import { io, Socket } from "socket.io-client"
+import { useCallback, useMemo, useState, useEffect, useRef } from "react"
+import { io } from "socket.io-client"
 
 import { AiReasoningTrail } from "@/components/shared/ai-reasoning-trail"
 import { StatusBadge } from "@/components/shared/status-badge"
@@ -49,6 +48,34 @@ import type {
   Supplier,
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
+
+type MessageWithFileUrl = NegotiationMessage & { file_url?: string | null }
+const fileUrlFor = (message: NegotiationMessage) =>
+  (message as MessageWithFileUrl).file_url ?? undefined
+
+function splitThinking(body: string) {
+  try {
+    const safeBody = typeof body === "string" ? body : ""
+    const thinkingMatches = Array.from(
+      safeBody.matchAll(/<thinking>([\s\S]*?)<\/thinking>/gi)
+    )
+    const thinking = thinkingMatches
+      .map((match) => (match[1] ?? "").trim())
+      .filter(Boolean)
+      .join("\n\n")
+
+    const stripped = safeBody
+      .replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
+      .trim()
+
+    return {
+      thinking,
+      visible: stripped.length > 0 ? stripped : "Processing deal details...",
+    }
+  } catch {
+    return { thinking: "", visible: "Processing deal details..." }
+  }
+}
 
 const invoiceRiskTone: Record<Invoice["riskLevel"], StatusTone> = {
   "Low Risk": "success",
@@ -106,7 +133,6 @@ type ConversationWorkspaceProps = {
   conversation: Conversation
   supplier?: Supplier
   linkedProducts: Product[]
-  messages: NegotiationMessage[]
   invoicesById: Record<string, Invoice>
   linkedInvoice?: Invoice
 }
@@ -115,10 +141,18 @@ export function ConversationWorkspace({
   conversation,
   supplier,
   linkedProducts,
-  messages,
   invoicesById,
   linkedInvoice,
 }: ConversationWorkspaceProps) {
+  type SocketMessagePayload = {
+    room_id?: string
+    sender?: string
+    content?: string
+    file_url?: string | null
+    file_name?: string | null
+    file_type?: string | null
+  }
+
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null)
@@ -126,57 +160,208 @@ export function ConversationWorkspace({
   const [pulseMessageId, setPulseMessageId] = useState<string | null>(null)
   const [pdfInlineOpen, setPdfInlineOpen] = useState<Record<string, boolean>>({})
 
-  // Socket Live Integration Additions
-  const [socket, setSocket] = useState<Socket | null>(null)
-  const [liveMessages, setLiveMessages] = useState<any[]>([])
-  const [isStartingWorkflow, setIsStartingWorkflow] = useState(false)
+  const [liveMessages, setLiveMessages] = useState<MessageWithFileUrl[]>([])
+  const [isWaitingForAI, setIsWaitingForAI] = useState(false)
+  const seenMessageSignaturesRef = useRef<Set<string>>(new Set())
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Negotiation state
+  const [isNegotiating, setIsNegotiating] = useState(false)
+  const [supplierReply, setSupplierReply] = useState("")
+  const [isSendingReply, setIsSendingReply] = useState(false)
+
+  const isConversationComplete = useMemo(() => {
+    const stateRaw =
+      String((conversation as unknown as { state?: string }).state ?? "").trim()
+    const normalizedState = stateRaw.toLowerCase()
+    return (
+      normalizedState === "completed" ||
+      normalizedState === "closed" ||
+      conversation.negotiationState === "Closed" ||
+      conversation.status === "resolved"
+    )
+  }, [conversation])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [liveMessages.length])
 
   useEffect(() => {
     const newSocket = io("http://localhost:8000", { transports: ["websocket"] })
 
     newSocket.on("connect", () => {
-      newSocket.emit("join_room_event", { room_id: "100", role: "merchant_dashboard" })
+      newSocket.emit("join_room_event", {
+        room_id: conversation.id,
+        role: "merchant_dashboard",
+      })
     })
 
-    newSocket.on("receive_message", (data: any) => {
-      if (data.sender !== "System") {
-         let attType: "image" | "pdf" | undefined = undefined;
-         if (data.file_url) {
-           if (data.file_type && data.file_type.includes("image")) attType = "image";
-           else if (data.file_type && data.file_type.includes("pdf")) attType = "pdf";
-         }
+    newSocket.on("receive_message", (data: SocketMessagePayload) => {
+      const sender = String(data?.sender ?? "")
+      if (sender.toLowerCase() === "system") return
 
-         setLiveMessages((prev) => [...prev, {
-            id: `live-${Math.random()}`,
-            type: data.sender === "Supplier" ? "supplier-message" : "merchant-action",
-            author: data.sender === "Supplier" ? supplier?.name || "Supplier" : "Z.AI Auto-Action",
-            sentiment: "neutral",
-            body: data.content || (attType === "image" ? "Uploaded an image" : attType === "pdf" ? "Uploaded a document" : "New message"),
-            language: "EN",
-            attachmentType: attType,
-            attachmentLabel: data.file_name,
-            file_url: data.file_url
-         }])
+      const isAiSender =
+        /\b(ai|assistant|bot)\b/i.test(sender) || /z\.ai/i.test(sender)
+      const isSupplierSender =
+        sender.toLowerCase().includes("supplier") ||
+        (supplier?.name ? sender.toLowerCase() === supplier.name.toLowerCase() : false)
+
+      if (isAiSender) {
+        setIsWaitingForAI(false)
       }
+
+      let attachmentType: "image" | "pdf" | undefined = undefined
+      if (data?.file_url) {
+        if (String(data.file_type ?? "").includes("image")) attachmentType = "image"
+        else if (String(data.file_type ?? "").includes("pdf")) attachmentType = "pdf"
+      }
+
+      const content =
+        typeof data?.content === "string" && data.content.trim().length > 0
+          ? data.content.trim()
+          : attachmentType === "image"
+            ? "Uploaded an image"
+            : attachmentType === "pdf"
+              ? "Uploaded a document"
+              : "New message"
+
+      const signature = [
+        sender.toLowerCase(),
+        content,
+        String(data?.file_url ?? ""),
+        String(data?.file_name ?? ""),
+      ].join("|")
+      if (seenMessageSignaturesRef.current.has(signature)) return
+      seenMessageSignaturesRef.current.add(signature)
+
+    setLiveMessages((prev) => [
+        ...prev,
+        {
+          id: `live-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          conversationId: conversation.id,
+          supplierId: conversation.supplierId,
+          type: isAiSender
+            ? "ai-recommendation"
+            : isSupplierSender
+              ? "supplier-message"
+              : "merchant-action",
+          author: isAiSender ? "ai" : isSupplierSender ? "supplier" : "merchant",
+          sentiment: "neutral",
+          body: content,
+          language: "EN",
+          createdAt: new Date().toISOString(),
+          attachmentType,
+          attachmentLabel:
+            typeof data?.file_name === "string" ? data.file_name : undefined,
+          file_url: data?.file_url ?? null,
+        },
+      ])
     })
 
-    setSocket(newSocket)
     return () => { newSocket.disconnect() }
-  }, [supplier?.name])
+  }, [conversation.id, conversation.supplierId, supplier?.name])
 
-  const handleStartWorkflow = async () => {
-    setIsStartingWorkflow(true)
+  const handleStartNegotiation = async () => {
+    if (isConversationComplete) return
+    setIsWaitingForAI(true)
+    setIsNegotiating(true)
     try {
-      await fetch(`http://localhost:8000/api/v1/chat/100/start`, { method: "POST" })
+      // For now, we'll use a hardcoded restock_request_id. In a real app,
+      // you'd fetch this from the conversation's linked workflow
+      const response = await fetch("http://localhost:8000/api/v1/negotiation/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversation_id: conversation.id,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        throw new Error(
+          `Failed to start negotiation: ${response.status} ${response.statusText}${
+            errorText ? `\n${errorText}` : ""
+          }`
+        )
+      }
+
+      try {
+        const result = await response.json()
+        console.log("Negotiation started:", result)
+      } catch {
+        // Backend might reply with an empty body or non-JSON; don't crash the UI.
+      }
+    } catch (error) {
+      console.error("Failed to start negotiation:", error)
+      alert("Failed to start negotiation. Check console for details.")
+      setIsWaitingForAI(false)
     } finally {
-      setIsStartingWorkflow(false)
+      setIsNegotiating(false)
     }
   }
 
-  const handleInterrupt = () => {
-     if (socket) {
-        socket.emit("stop_ai", { room_id: "100" })
-     }
+  const handleSendSupplierReply = async () => {
+    if (!supplierReply.trim()) return
+    if (isConversationComplete) return
+
+    setIsWaitingForAI(true)
+
+    const optimisticContent = supplierReply.trim()
+    const optimisticSignature = ["supplier", optimisticContent, "", ""].join("|")
+    seenMessageSignaturesRef.current.add(optimisticSignature)
+    setLiveMessages((prev) => [
+      ...prev,
+      {
+        id: `local-supplier-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        conversationId: conversation.id,
+        supplierId: conversation.supplierId,
+        type: "supplier-message",
+        author: "supplier",
+        sentiment: "neutral",
+        body: optimisticContent,
+        language: "EN",
+        createdAt: new Date().toISOString(),
+      },
+    ])
+
+    setIsSendingReply(true)
+    try {
+      const response = await fetch("http://localhost:8000/api/v1/negotiation/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversation_id: conversation.id,
+          supplier_message: optimisticContent,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        throw new Error(
+          `Failed to send reply: ${response.status} ${response.statusText}${
+            errorText ? `\n${errorText}` : ""
+          }`
+        )
+      }
+
+      try {
+        const result = await response.json()
+        console.log("Supplier reply processed:", result)
+      } catch {
+        // Backend might reply with an empty body or non-JSON; don't crash the UI.
+      }
+      setSupplierReply("")
+    } catch (error) {
+      console.error("Failed to send supplier reply:", error)
+      alert("Failed to send reply. Check console for details.")
+      setIsWaitingForAI(false)
+    } finally {
+      setIsSendingReply(false)
+    }
   }
 
   const reasoning = useMemo(
@@ -196,12 +381,12 @@ export function ConversationWorkspace({
         setHighlightedMessageId(null)
         return
       }
-      const id = getEvidenceSourceMessageId(messages, field)
+      const id = getEvidenceSourceMessageId(liveMessages, field)
       if (id) {
         setHighlightedMessageId(id)
       }
     },
-    [messages]
+    [liveMessages]
   )
 
   const handleAttachmentClick = useCallback(
@@ -336,26 +521,23 @@ export function ConversationWorkspace({
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={handleStartWorkflow} disabled={isStartingWorkflow} className="focus:outline-none transition-opacity hover:opacity-80">
-                     <StatusBadge label={isStartingWorkflow ? "Booting..." : "Z.AI live"} tone="ai" />
-                  </button>
-                  <Button
-                    type="button"
-                    onClick={handleInterrupt}
-                    className="h-8 rounded-[10px] bg-[#EF4444] px-3 text-[13px] text-white hover:bg-[#DC2626]"
-                  >
-                    <CircleStop className="size-3.5" aria-hidden="true" />
-                    Interrupt
-                  </Button>
+                  {!isConversationComplete ? (
+                    <Button
+                      type="button"
+                      onClick={handleStartNegotiation}
+                      disabled={isNegotiating || isWaitingForAI}
+                      className="h-8 rounded-[10px] bg-[#10B981] px-3 text-[13px] text-white hover:bg-[#059669]"
+                    >
+                      {isNegotiating ? "Starting..." : "Start Negotiation"}
+                    </Button>
+                  ) : (
+                    <StatusBadge label="Negotiation Complete" tone="success" />
+                  )}
                 </div>
               </div>
             </CardHeader>
 
             <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-              <div className="shrink-0 border-b border-[#243047] px-5 py-3 text-center text-[13px] font-medium uppercase tracking-wider text-[#6B7280]">
-                PO PDF dispatched to supplier · Z.AI running negotiation loop
-              </div>
-
               {conversation.aiExtraction.supplierLanguage !== "English" ? (
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#243047] bg-[#8B5CF6]/5 px-5 py-2.5">
                   <div className="flex items-center gap-2">
@@ -377,7 +559,7 @@ export function ConversationWorkspace({
               ) : null}
 
               <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-                {[...messages, ...liveMessages].map((message) => {
+                {liveMessages.map((message) => {
                   const invoice = message.invoiceId
                     ? invoicesById[message.invoiceId]
                     : undefined
@@ -394,31 +576,40 @@ export function ConversationWorkspace({
                   )
                 })}
 
-                <div className="ml-8 max-w-[86%] rounded-[14px] border border-[#8B5CF6]/30 bg-[#111827] p-4 shadow-lg shadow-black/10">
-                  <div className="mb-3 flex items-center gap-2">
-                    <StatusBadge label="Z.AI autonomous draft" tone="ai" />
-                    <span className="text-[13px] text-[#9CA3AF]">
-                      auto-send queued
-                    </span>
+                {isWaitingForAI ? (
+                  <div className="ml-8 max-w-[86%] rounded-[14px] border border-[#243047] bg-[#111827] p-3">
+                    <div className="flex items-center gap-2 text-[14px] text-[#9CA3AF]">
+                      <span className="inline-flex size-2 animate-pulse rounded-full bg-[#8B5CF6]" />
+                      <span>typing...</span>
+                    </div>
                   </div>
-                  <p className="text-[15px] leading-6 text-[#E5E7EB]">
-                    We can accept the split delivery only if freight is capped
-                    and the second shipment quantity is confirmed. If volume
-                    increases to the AI recommended bundle, can you meet the
-                    target range of {conversation.targetPriceRange}?
-                  </p>
-                  <div className="mt-4 rounded-[10px] border border-[#243047] bg-[#172033] p-3">
-                    <p className="text-[13px] font-medium text-[#C4B5FD]">
-                      Z.AI automation rationale
-                    </p>
-                    <p className="mt-1 text-[13px] leading-5 text-[#9CA3AF]">
-                      {conversation.nextAction.negotiationSummary}
-                    </p>
-                  </div>
-                  <p className="mt-4 text-[13px] text-[#9CA3AF]">
-                    No approval required. Z.AI continues automatically unless
-                    the operator interrupts.
-                  </p>
+                ) : null}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Supplier Reply Section */}
+              <div className="shrink-0 border-t border-[#243047] bg-[#0B1020] p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-[13px] font-medium text-[#9CA3AF]">Test Supplier Reply</span>
+                  <StatusBadge label="Development Mode" tone="warning" />
+                </div>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={supplierReply}
+                    onChange={(e) => setSupplierReply(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSendSupplierReply()}
+                    placeholder="Enter supplier's counter-offer or response..."
+                    className="flex-1 rounded-[10px] border border-[#243047] bg-[#172033] px-3 py-2 text-[14px] text-[#E5E7EB] outline-none placeholder:text-[#6B7280] focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20"
+                    disabled={isSendingReply || isWaitingForAI || isConversationComplete}
+                  />
+                  <Button
+                    onClick={handleSendSupplierReply}
+                    disabled={isSendingReply || isWaitingForAI || isConversationComplete || !supplierReply.trim()}
+                    className="h-9 rounded-[10px] bg-[#3B82F6] px-4 text-[13px] text-white hover:bg-[#2563EB] disabled:opacity-50"
+                  >
+                    {isSendingReply ? "Sending..." : "Send Reply"}
+                  </Button>
                 </div>
               </div>
 
@@ -454,10 +645,6 @@ export function ConversationWorkspace({
                   <div className="flex flex-wrap items-center gap-2">
                     <Button className="h-10 rounded-[10px] bg-[#172033] px-4 text-[#E5E7EB] hover:bg-[#243047]">
                       View Z.AI Analysis
-                    </Button>
-                    <Button onClick={handleInterrupt} className="h-10 rounded-[10px] bg-[#EF4444] px-4 text-white hover:bg-[#DC2626]">
-                      <CircleStop className="size-4" aria-hidden="true" />
-                      Interrupt & Take Over
                     </Button>
                   </div>
                 </div>
@@ -662,6 +849,7 @@ function MessageBubble({
 }) {
   const isSupplier = message.type === "supplier-message"
   const isMerchant = message.type === "merchant-action"
+  const { thinking, visible } = splitThinking(message.body)
 
   return (
     <motion.div
@@ -717,18 +905,31 @@ function MessageBubble({
             {message.author} / {message.sentiment}
           </span>
         </div>
-        <p
-          className="text-[15px] leading-6 text-[#E5E7EB]"
-          lang={
-            message.language === "ZH"
-              ? "zh"
-              : message.language === "JA"
-                ? "ja"
-                : undefined
-          }
-        >
-          {message.body}
-        </p>
+        {visible ? (
+          <p
+            className="text-[15px] leading-6 text-[#E5E7EB]"
+            lang={
+              message.language === "ZH"
+                ? "zh"
+                : message.language === "JA"
+                  ? "ja"
+                  : undefined
+            }
+          >
+            {visible}
+          </p>
+        ) : null}
+
+        {thinking ? (
+          <details className="mt-3 rounded-[10px] border border-[#243047] bg-[#0B1220] p-3">
+            <summary className="cursor-pointer select-none text-[13px] font-medium text-[#9CA3AF]">
+              AI Reasoning
+            </summary>
+            <pre className="mt-2 whitespace-pre-wrap text-[13px] leading-5 text-[#E5E7EB]">
+              {thinking}
+            </pre>
+          </details>
+        ) : null}
         {message.translation ? (
           <div className="mt-3 rounded-[10px] border border-dashed border-[#8B5CF6]/30 bg-[#8B5CF6]/5 p-3">
             <div className="mb-1 flex items-center gap-1.5 text-[13px] font-medium uppercase tracking-wider text-[#C4B5FD]">
@@ -745,7 +946,7 @@ function MessageBubble({
             invoice={invoice}
             attachmentType={message.attachmentType}
             attachmentLabel={message.attachmentLabel}
-            fileUrl={(message as any).file_url}
+            fileUrl={fileUrlFor(message)}
             onClick={onAttachmentClick}
           />
         ) : message.attachmentType ? (
@@ -753,7 +954,7 @@ function MessageBubble({
             type={message.attachmentType}
             label={message.attachmentLabel ?? "Attachment"}
             orderSummary={message.orderSummary}
-            fileUrl={(message as any).file_url}
+            fileUrl={fileUrlFor(message)}
             inlinePdfExpanded={inlinePdfExpanded}
             onClick={onAttachmentClick}
           />
@@ -1143,7 +1344,7 @@ function EvidenceBody({
 }) {
   const { message, invoice } = preview
   const type = message.attachmentType
-  const fileUrl = (message as any).file_url;
+  const fileUrl = fileUrlFor(message)
 
   const title = invoice
     ? `Invoice · ${invoice.invoiceNumber}`
@@ -1220,8 +1421,8 @@ function EvidenceMetaCard({ message }: { message: NegotiationMessage }) {
 }
 
 function ImagePreviewBody({ message }: { message: NegotiationMessage }) {
-  const fileUrl = (message as any).file_url;
-  
+  const fileUrl = fileUrlFor(message)
+
   return (
     <div className="rounded-[12px] border border-[#243047] bg-[#0F1728] p-4">
       <div className="relative aspect-[4/3] overflow-hidden rounded-[10px] border border-[#243047] bg-[linear-gradient(135deg,#172033,#111827_40%,#243047_80%,#1F2A44)] flex items-center justify-center">
@@ -1249,7 +1450,7 @@ function ImagePreviewBody({ message }: { message: NegotiationMessage }) {
 }
 
 function PdfPreviewBody({ message }: { message: NegotiationMessage }) {
-  const fileUrl = (message as any).file_url;
+  const fileUrl = fileUrlFor(message)
 
   return (
     <div className="rounded-[12px] border border-[#243047] bg-[#0F1728] p-4">

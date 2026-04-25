@@ -48,7 +48,16 @@ def get_engine() -> Engine:
             "Missing DATABASE_URL or SUPABASE_DB_URL. Set one of them before using the LangChain tools."
         )
 
-    return create_engine(database_url, pool_pre_ping=True)
+    connect_args: dict[str, Any] = {}
+    if database_url.lower().startswith("postgres"):
+        connect_args = {"options": "-c statement_timeout=60000"}
+
+    return create_engine(
+        database_url,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+        connect_args=connect_args,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -498,6 +507,99 @@ class InvoiceActionInput(BaseModel):
 
 
 class RestockRequestInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    request_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Exact restock request ID to look up, for example 'req-abc123'.",
+    )
+    conversation_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Exact conversation ID to look up when the restock request ID is not available.",
+    )
+
+    @model_validator(mode="after")
+    def _check_identifier(self):
+        if not self.request_id and not self.conversation_id:
+            raise ValueError(
+                "Provide either request_id or conversation_id so the tool can find the restock request context."
+            )
+        return self
+
+
+class ConversationStateUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    conversation_id: str = Field(
+        ...,
+        min_length=1,
+        description="Exact conversation ID to update.",
+    )
+    new_state: Literal["new_input", "needs_analysis", "counter_offer", "waiting_reply", "accepted", "closed"] = Field(
+        ...,
+        description="The new state for the conversation.",
+    )
+    message: str = Field(
+        ...,
+        min_length=1,
+        description="The latest message content to store in the conversation.",
+    )
+
+
+class FinalOrderInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    restock_request_id: str = Field(
+        ...,
+        min_length=1,
+        description="The restock request ID that this order fulfills.",
+    )
+    supplier_id: str = Field(
+        ...,
+        min_length=1,
+        description="The supplier ID for this order.",
+    )
+    final_price: float = Field(
+        ...,
+        gt=0,
+        description="The final negotiated price per unit.",
+    )
+    final_qty: int = Field(
+        ...,
+        gt=0,
+        description="The final quantity to order.",
+    )
+
+
+class InvoiceRecordInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    order_id: str | None = Field(
+        default=None,
+        description="Optional order ID that this invoice is for. Can be null when just registering a file attachment.",
+    )
+    amount: float | None = Field(
+        default=None,
+        description="Optional invoice amount. Defaults to 0.00 when not provided.",
+    )
+    invoice_number: str | None = Field(
+        default=None,
+        description="Optional invoice number. Auto-generated if not provided.",
+    )
+    file_url: str = Field(
+        ...,
+        min_length=1,
+        description="The URL to the uploaded invoice file (PDF, PNG, etc.).",
+    )
+    source_type: str = Field(
+        default="upload",
+        description="Source type of the invoice. Defaults to 'upload'.",
+        enum=["pdf", "image", "email_attachment", "upload"],
+    )
+
+
+class RestockRequestCreateInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     sku: str = Field(
@@ -1493,7 +1595,6 @@ def record_invoice_action(
         )
     )
 
-
 def _create_restock_request_impl(
     sku: str,
     requested_quantity: int,
@@ -1542,7 +1643,7 @@ def _create_restock_request_impl(
         }
 
 
-@tool("create_restock_request", args_schema=RestockRequestInput)
+@tool("create_restock_request", args_schema=RestockRequestCreateInput)
 def create_restock_request(
     sku: str,
     requested_quantity: int,
@@ -1579,6 +1680,343 @@ def create_restock_request(
     )
 
 
+def _resolve_restock_request_for_conversation(session: Session, conversation_id: str) -> dict[str, Any] | None:
+    conversations = table("conversations")
+    restock_requests = table("restock_requests")
+    products = table("products")
+    conversation_products = table("conversation_products")
+    workflows = table("workflows")
+
+    # First try to find via conversation_products -> products -> restock_requests
+    row = session.execute(
+        select(
+            restock_requests.c.id.label("restock_request_id"),   # Added
+            products.c.primary_supplier_id.label("supplier_id"), # Added
+            restock_requests.c.requested_quantity,
+            restock_requests.c.target_price_min.label("request_target_price_min"),
+            restock_requests.c.target_price_max.label("request_target_price_max"),
+            workflows.c.target_price_min.label("workflow_target_price_min"),
+            workflows.c.target_price_max.label("workflow_target_price_max"),
+            products.c.sku,
+            products.c.name,
+        )
+        .select_from(
+            conversation_products
+            .join(products, conversation_products.c.product_id == products.c.id)
+            .join(restock_requests, restock_requests.c.product_id == products.c.id)
+            .outerjoin(workflows, restock_requests.c.workflow_id == workflows.c.id)
+        )
+        .where(conversation_products.c.conversation_id == conversation_id)
+        .order_by(desc(restock_requests.c.updated_at), desc(restock_requests.c.created_at))
+        .limit(1)
+    ).mappings().first()
+
+    if row:
+        return dict(row)
+
+    # Fallback: find recent restock requests for the supplier of this conversation
+    conversation = session.execute(
+        select(conversations.c.supplier_id)
+        .where(conversations.c.id == conversation_id)
+    ).mappings().first()
+
+    if conversation and conversation["supplier_id"]:
+        row = session.execute(
+            select(
+                restock_requests.c.id.label("restock_request_id"),   # Added
+                products.c.primary_supplier_id.label("supplier_id"), # Added
+                restock_requests.c.requested_quantity,
+                restock_requests.c.target_price_min.label("request_target_price_min"),
+                restock_requests.c.target_price_max.label("request_target_price_max"),
+                workflows.c.target_price_min.label("workflow_target_price_min"),
+                workflows.c.target_price_max.label("workflow_target_price_max"),
+                products.c.sku,
+                products.c.name,
+            )
+            .select_from(
+                restock_requests
+                .join(products, restock_requests.c.product_id == products.c.id)
+                .outerjoin(workflows, restock_requests.c.workflow_id == workflows.c.id)
+            )
+            .where(products.c.primary_supplier_id == conversation["supplier_id"])
+            .order_by(desc(restock_requests.c.updated_at), desc(restock_requests.c.created_at))
+            .limit(1)
+        ).mappings().first()
+
+        if row:
+            return dict(row)
+
+    # Last resort: find the most recent restock request
+    row = session.execute(
+        select(
+            restock_requests.c.id.label("restock_request_id"),   # Added
+            products.c.primary_supplier_id.label("supplier_id"), # Added
+            restock_requests.c.requested_quantity,
+            restock_requests.c.target_price_min.label("request_target_price_min"),
+            restock_requests.c.target_price_max.label("request_target_price_max"),
+            workflows.c.target_price_min.label("workflow_target_price_min"),
+            workflows.c.target_price_max.label("workflow_target_price_max"),
+            products.c.sku,
+            products.c.name,
+        )
+        .select_from(
+            restock_requests
+            .join(products, restock_requests.c.product_id == products.c.id)
+            .outerjoin(workflows, restock_requests.c.workflow_id == workflows.c.id)
+        )
+        .order_by(desc(restock_requests.c.updated_at), desc(restock_requests.c.created_at))
+        .limit(1)
+    ).mappings().first()
+
+    if row:
+        return dict(row)
+
+    return None
+
+
+def _get_restock_context_impl(
+    request_id: str | None = None,
+    conversation_id: str | None = None,
+) -> dict[str, Any]:
+    restock_requests = table("restock_requests")
+    products = table("products")
+    workflows = table("workflows")
+
+    with session_scope() as session:
+        row = None
+
+        if request_id is not None:
+            row = session.execute(
+                select(
+                    restock_requests.c.id.label("restock_request_id"),   # Added this
+                    products.c.primary_supplier_id.label("supplier_id"), # Added this
+                    restock_requests.c.requested_quantity,
+                    restock_requests.c.target_price_min.label("request_target_price_min"),
+                    restock_requests.c.target_price_max.label("request_target_price_max"),
+                    workflows.c.target_price_min.label("workflow_target_price_min"),
+                    workflows.c.target_price_max.label("workflow_target_price_max"),
+                    products.c.sku,
+                    products.c.name,
+                )
+                .select_from(
+                    restock_requests
+                    .join(products, restock_requests.c.product_id == products.c.id)
+                    .outerjoin(workflows, restock_requests.c.workflow_id == workflows.c.id)
+                )
+                .where(restock_requests.c.id == request_id)
+            ).mappings().first()
+
+            if not row and conversation_id is None:
+                # The caller may have accidentally supplied a conversation ID
+                # instead of a restock request ID.
+                conversation_id = request_id
+
+        if row is None and conversation_id is not None:
+            row = _resolve_restock_request_for_conversation(session, conversation_id)
+
+        if not row:
+            if request_id:
+                raise ValueError(f"No restock request found for ID '{request_id}'.")
+            raise ValueError(f"No restock request context found for conversation '{conversation_id}'.")
+
+        target_price_min = row["request_target_price_min"]
+        target_price_max = row["request_target_price_max"]
+        if target_price_min is None and row.get("workflow_target_price_min") is not None:
+            target_price_min = row["workflow_target_price_min"]
+        if target_price_max is None and row.get("workflow_target_price_max") is not None:
+            target_price_max = row["workflow_target_price_max"]
+
+        # Get conversation state and order information
+        conversation_state = None
+        order_id = None
+        if conversation_id:
+            conversations = table("conversations")
+            submitted_orders = table("submitted_orders")
+
+            conv_row = session.execute(
+                select(conversations.c.state)
+                .where(conversations.c.id == conversation_id)
+            ).mappings().first()
+
+            if conv_row:
+                conversation_state = conv_row["state"]
+
+                # Check if there's already an order for this restock request
+                order_row = session.execute(
+                    select(submitted_orders.c.id)
+                    .where(submitted_orders.c.restock_request_id == row["restock_request_id"])
+                    .order_by(desc(submitted_orders.c.created_at))
+                    .limit(1)
+                ).mappings().first()
+
+                if order_row:
+                    order_id = order_row["id"]
+
+        return {
+            "restock_request_id": row["restock_request_id"],
+            "supplier_id": row["supplier_id"],
+            "requested_quantity": row["requested_quantity"],
+            "target_price_min": float(target_price_min) if target_price_min is not None else None,
+            "target_price_max": float(target_price_max) if target_price_max is not None else None,
+            "sku": row["sku"],
+            "name": row["name"],
+            "conversation_state": conversation_state,
+            "order_id": order_id,
+        }
+
+
+def _update_conversation_state_impl(
+    conversation_id: str,
+    new_state: Literal["new_input", "needs_analysis", "counter_offer", "waiting_reply", "accepted", "closed"],
+    message: str,
+) -> dict[str, Any]:
+    conversations = table("conversations")
+
+    with session_scope() as session:
+        updated_row = session.execute(
+            update(conversations)
+            .where(conversations.c.id == conversation_id)
+            .values(state=new_state, latest_message=message)
+            .returning(*conversations.c)
+        ).mappings().first()
+
+        if not updated_row:
+            raise ValueError(f"No conversation found for ID '{conversation_id}'.")
+
+        session.commit()
+
+        return dict(updated_row)
+
+
+def _create_final_order_impl(
+    restock_request_id: str,
+    supplier_id: str,
+    final_price: float,
+    final_qty: int,
+) -> dict[str, Any]:
+    submitted_orders = table("submitted_orders")
+
+    with session_scope() as session:
+        order_id = f"ord-{uuid.uuid4().hex[:12]}"
+
+        created_order = session.execute(
+            insert(submitted_orders)
+            .values(
+                id=order_id,
+                restock_request_id=restock_request_id,
+                supplier_id=supplier_id,
+                final_price=final_price,
+                final_quantity=final_qty,
+                status="confirmed",
+            )
+            .returning(*submitted_orders.c)
+        ).mappings().one()
+        session.commit()
+
+        return dict(created_order)
+
+
+def _record_invoice_impl(
+    order_id: str | None = None,
+    amount: float | None = None,
+    invoice_number: str | None = None,
+    file_url: str = "",
+    source_type: str = "upload",
+) -> dict[str, Any]:
+    invoices = table("invoices")
+
+    with session_scope() as session:
+        invoice_id = f"inv-{uuid.uuid4().hex[:12]}"
+
+        # Provide defaults for required fields
+        final_amount = amount if amount is not None else 0.00
+        final_invoice_number = invoice_number if invoice_number else f"INV-{uuid.uuid4().hex[:8].upper()}"
+        final_source_type = source_type
+
+        created_invoice = session.execute(
+            insert(invoices)
+            .values(
+                id=invoice_id,
+                order_id=order_id,
+                amount=final_amount,
+                invoice_number=final_invoice_number,
+                file_url=file_url,
+                source_type=final_source_type,
+                currency="USD",  # Default currency
+                validation_status="parsed",
+                risk_level="low",  # Default risk level
+                approval_state="waiting_approval",
+            )
+            .returning(*invoices.c)
+        ).mappings().one()
+        session.commit()
+
+        return dict(created_invoice)
+
+
+@tool("get_restock_context", args_schema=RestockRequestInput)
+def get_restock_context(
+    request_id: str | None = None,
+    conversation_id: str | None = None,
+) -> dict[str, Any]:
+    """Fetch the context for a restock request including target prices and product details.
+
+    Use this tool to get the necessary information for processing a restock request,
+    including the target price range and product information.
+    """
+
+    return _json_ready(_get_restock_context_impl(request_id, conversation_id))
+
+
+@tool("update_conversation_state", args_schema=ConversationStateUpdateInput)
+def update_conversation_state(
+    conversation_id: str,
+    new_state: Literal["new_input", "needs_analysis", "counter_offer", "waiting_reply", "accepted", "closed"],
+    message: str,
+) -> dict[str, Any]:
+    """Update the state and latest message of a conversation.
+
+    Use this tool to change the conversation state and update the latest message
+    during negotiation or communication with suppliers.
+    """
+
+    return _json_ready(_update_conversation_state_impl(conversation_id, new_state, message))
+
+
+@tool("create_final_order", args_schema=FinalOrderInput)
+def create_final_order(
+    restock_request_id: str,
+    supplier_id: str,
+    final_price: float,
+    final_qty: int,
+) -> dict[str, Any]:
+    """Create a final confirmed order after negotiation.
+
+    Use this tool to finalize a restock order with the agreed upon price and quantity,
+    creating a confirmed order record in the submitted_orders table.
+    """
+
+    return _json_ready(_create_final_order_impl(restock_request_id, supplier_id, final_price, final_qty))
+
+
+@tool("record_invoice", args_schema=InvoiceRecordInput)
+def record_invoice(
+    order_id: str | None = None,
+    amount: float | None = None,
+    invoice_number: str | None = None,
+    file_url: str = "",
+    source_type: str = "upload",
+) -> dict[str, Any]:
+    """Record a new invoice from an uploaded file.
+
+    Use this tool to create an invoice record when a supplier sends a file attachment.
+    For file attachments, only file_url is required - other fields will use defaults.
+    For complete invoices, provide all fields for proper validation setup.
+    """
+
+    return _json_ready(_record_invoice_impl(order_id, amount, invoice_number, file_url, source_type))
+
+
 RECOMMENDED_RESTOCK_TOOLS = [
     "get_product_stock_and_target_price",
     "get_product_stock_demand_trend",
@@ -1591,7 +2029,41 @@ RECOMMENDED_RESTOCK_TOOLS = [
     "record_invoice_validation_result",
     "record_invoice_action",
     "create_restock_request",
+    "get_restock_context",
+    "update_conversation_state",
+    "create_final_order",
+    "record_invoice",
 ]
+
+
+NEGOTIATION_SYSTEM_PROMPT = """You are an autonomous procurement officer responsible for negotiating restock orders with suppliers.
+
+You have access to 4 tools: get_restock_context, update_conversation_state, create_final_order, record_invoice.
+
+Output format (strict):
+1) Put ALL internal reasoning, calculations, tool-status, and negotiation status summaries inside:
+<thinking>...</thinking>
+2) Put ONLY the supplier-facing message outside of <thinking> tags.
+3) Never include <thinking> content in the supplier-facing message.
+4) When you use tools, never include tool-call JSON/payloads in the message text. Tool execution is handled separately.
+
+When starting a negotiation, use get_restock_context to find the target_price_min, target_price_max, and requested_quantity.
+
+Check the conversation_state and order_id in the context:
+- If conversation_state is 'accepted' and order_id exists, the deal is done - just file any invoice attachments.
+- If conversation_state is 'counter_offer' or 'waiting_reply', continue the negotiation.
+- If conversation_state is 'new_input', start fresh negotiation.
+
+Never offer above the target_price_max.
+
+If the supplier's price is too high, counter-offer and use update_conversation_state with 'counter_offer'.
+
+If the supplier agrees to a price within the range, use create_final_order to finalize, and update the state to 'accepted'.
+
+When the supplier sends a file attachment (like an invoice PDF), use record_invoice with just the file_url to register it in the database.
+After record_invoice succeeds, update_conversation_state to 'closed' with a short closing message.
+
+Keep messages professional, concise, and focused on the transaction."""
 
 
 if __name__ == "__main__":
