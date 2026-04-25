@@ -5,7 +5,7 @@
 
 ---
 ### Pitching video:
-link: 
+link: https://drive.google.com/file/d/1rx-pVQoGYBLK321onvQKFunZYgv5PA2t/view?usp=drive_link
 
 ## 📌 Overview
 
