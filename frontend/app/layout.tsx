@@ -18,6 +18,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Bee2Bee Restock Copilot",
   description: "Autonomous restocking and settlement command center",
+  icons: {
+    icon: "/bee2bee-mark.svg",
+    shortcut: "/bee2bee-mark.svg",
+    apple: "/bee2bee-mark.svg",
+  },
 }
 
 export default function RootLayout({

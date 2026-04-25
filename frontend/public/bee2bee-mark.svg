@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="bee2beeTitle bee2beeDesc">
+  <title id="bee2beeTitle">Bee2Bee system mark</title>
+  <desc id="bee2beeDesc">A glowing robotic bee carrying a package, used as the Bee2Bee Restock Copilot icon.</desc>
+  <defs>
+    <linearGradient id="bodyGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFE978"/>
+      <stop offset="55%" stop-color="#FFC400"/>
+      <stop offset="100%" stop-color="#FF9F0A"/>
+    </linearGradient>
+    <linearGradient id="wingGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#D9E5F7"/>
+    </linearGradient>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g filter="url(#softGlow)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M42 136h26m-36 14h40m-30 14h18" stroke="#FFD84D" stroke-width="8"/>
+    <circle cx="26" cy="164" r="5" fill="#FFF5BF" stroke="#D39A00" stroke-width="3"/>
+    <circle cx="50" cy="150" r="4" fill="#FFF5BF" stroke="#D39A00" stroke-width="3"/>
+
+    <path d="M88 68c18-18 46-23 80 1 14 10 23 20 31 33-26 3-54-4-81-19-14-8-24-15-30-15z" fill="url(#wingGlow)" stroke="#6A5A16" stroke-width="4"/>
+    <path d="M68 94c20-8 49-7 83 17-26 8-56 7-82-4-10-4-17-9-23-13 6-1 13-1 22 0z" fill="url(#wingGlow)" stroke="#6A5A16" stroke-width="4"/>
+
+    <path d="M118 120c20-13 45-17 69-10-7 17-19 31-35 42-19 13-39 18-59 18 1-18 9-37 25-50z" fill="url(#bodyGlow)" stroke="#5C4A00" stroke-width="5"/>
+    <path d="M134 118c6 3 11 7 14 11m-2 13c5 3 9 6 13 10m-10 11c3 2 6 4 10 7" stroke="#7A5B00" stroke-width="8"/>
+
+    <circle cx="189" cy="106" r="22" fill="url(#bodyGlow)" stroke="#5C4A00" stroke-width="5"/>
+    <circle cx="189" cy="106" r="10" fill="none" stroke="#7A5B00" stroke-width="4"/>
+    <circle cx="196" cy="102" r="3" fill="#FFF5BF"/>
+
+    <path d="M198 80l17-17m-7 22 26-7" stroke="#6A5A16" stroke-width="5"/>
+
+    <path d="M168 146l-18 12" stroke="#6A5A16" stroke-width="5"/>
+    <path d="M147 154c7 6 9 14 7 24l11 9-5 10-18-8 7-13-9-9c-7 2-13 0-17-5 1-8 4-14 9-18 6 1 11 4 15 10z" fill="none" stroke="#D39A00" stroke-width="5"/>
+    <circle cx="140" cy="151" r="7" fill="#FFF5BF" stroke="#D39A00" stroke-width="4"/>
+    <circle cx="145" cy="174" r="7" fill="#FFF5BF" stroke="#D39A00" stroke-width="4"/>
+
+    <path d="M147 182l34 8v28h-48v-24l14-12z" fill="#FFF7D6" stroke="#6A5A16" stroke-width="4"/>
+    <path d="M147 182h32l12 9-23 7-21-4z" fill="#FFD84D" stroke="#D39A00" stroke-width="4"/>
+    <path d="M166 182v16" stroke="#D39A00" stroke-width="4"/>
+    <path d="M151 205v-9m5 9v-12" stroke="#3C3C3C" stroke-width="3"/>
+  </g>
+</svg>

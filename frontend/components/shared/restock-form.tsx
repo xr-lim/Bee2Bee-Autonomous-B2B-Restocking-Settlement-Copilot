@@ -459,29 +459,7 @@ export function RestockForm({
           </div>
         </section>
 
-        <section className="rounded-[12px] border border-[#243047] bg-[#172033] p-4">
-          <p className="text-[12px] font-medium text-[#C4B5FD]">
-            After approval Z.AI will automate:
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {automationPlan.map((step) => (
-              <div
-                key={step}
-                className="flex gap-2 text-[12px] leading-5 text-[#9CA3AF]"
-              >
-                <span className="mt-1 size-1.5 shrink-0 rounded-full bg-[#8B5CF6]" />
-                {step}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="max-w-[520px] text-[12px] leading-5 text-[#9CA3AF]">
-            On <span className="font-medium text-[#C4B5FD]">AI Restock</span>,
-            Z.AI generates a purchase order PDF, sends it to the supplier, and
-            opens a conversation to run the negotiation loop unless interrupted.
-          </p>
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex items-center gap-2">
             {isEditing ? (
               <>

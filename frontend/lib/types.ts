@@ -4,6 +4,7 @@ export type StatusTone = "default" | "success" | "warning" | "danger" | "ai"
 
 export type NavigationItem = {
   title: string
+  shortTitle?: string
   href: string
   icon: LucideIcon
 }

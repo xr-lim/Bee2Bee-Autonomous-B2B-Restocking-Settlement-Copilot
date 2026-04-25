@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Loader2, X } from "lucide-react"
+import { Eye, Loader2, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
@@ -44,9 +44,12 @@ export function DashboardRestockRowActions({
       <Button
         asChild
         variant="outline"
-        className="h-9 rounded-[10px] border-[#243047] bg-[#172033] px-3 text-[13px] text-[#E5E7EB] hover:bg-[#243047]"
+        className="h-10 rounded-2xl border-[#334155] bg-[#172033] px-3 text-[13px] font-semibold text-[#E5E7EB] hover:border-[#38BDF8]/40 hover:bg-[#1B2940]"
       >
-        <Link href={`/inventory/${sku}`}>{actionLabel}</Link>
+        <Link href={`/inventory/${sku}`} title={actionLabel}>
+          <Eye className="size-4" aria-hidden="true" />
+          View
+        </Link>
       </Button>
       {requestId ? (
         <Button
@@ -55,12 +58,13 @@ export function DashboardRestockRowActions({
           onClick={handleDelete}
           disabled={isDeleting}
           aria-label="Delete restock request"
-          className="size-9 rounded-[10px] border-[#3B2230] bg-[#1A1118] p-0 text-[#FCA5A5] hover:bg-[#2A1821] disabled:cursor-not-allowed disabled:opacity-60"
+          title="Delete request"
+          className="size-10 rounded-2xl border-[#3B2230] bg-[#1A1118] p-0 text-[#FCA5A5] hover:bg-[#2A1821] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isDeleting ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
           ) : (
-            <X className="size-4" aria-hidden="true" />
+            <Trash2 className="size-4" aria-hidden="true" />
           )}
         </Button>
       ) : null}

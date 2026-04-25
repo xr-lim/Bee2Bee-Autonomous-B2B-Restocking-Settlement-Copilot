@@ -1347,6 +1347,70 @@ export async function analyzeThresholdsAction(
   }
 }
 
+export async function analyzeRestockSuggestionsAction(): Promise<ThresholdAnalysisActionResult> {
+  try {
+    const response = await fetch(
+      `${backendApiBaseUrl()}/api/v1/ai/restock-analysis/run`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      }
+    )
+
+    const payload = await response.json().catch(() => null)
+    if (!response.ok) {
+      const detail =
+        payload && typeof payload === "object" && "detail" in payload
+          ? String(payload.detail)
+          : "Restock analysis request failed."
+      throw new Error(detail)
+    }
+
+    revalidatePath("/")
+    revalidatePath("/dashboard")
+    revalidatePath("/inventory")
+
+    return {
+      ok: true,
+      message:
+        payload?.created_count > 0
+          ? `Created ${payload.created_count} restock request${payload.created_count === 1 ? "" : "s"}.`
+          : "Restock analysis finished with no new requests.",
+      analyzedCount: payload?.analyzed_count,
+      createdCount: payload?.created_count,
+      results: (payload?.results ?? []).map((item: any) => ({
+        sku: item.sku,
+        status: item.status,
+        detail: item.detail,
+        trace: Array.isArray(item.trace)
+          ? item.trace.map((event: any) => ({
+              kind: typeof event?.kind === "string" ? event.kind : "event",
+              message: typeof event?.message === "string" ? event.message : "",
+              toolName:
+                typeof event?.tool_name === "string" ? event.tool_name : undefined,
+              toolInput: event?.tool_input,
+              toolSummary:
+                typeof event?.tool_summary === "string"
+                  ? event.tool_summary
+                  : undefined,
+              decision: event?.decision,
+              requestId:
+                typeof event?.request_id === "string" ? event.request_id : undefined,
+            }))
+          : [],
+      })),
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Restock analysis failed.",
+    }
+  }
+}
+
 export async function createProductAction(
   payload: ProductPayload
 ): Promise<ActionResult> {

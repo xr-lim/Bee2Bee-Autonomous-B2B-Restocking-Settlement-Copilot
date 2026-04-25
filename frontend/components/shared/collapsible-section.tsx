@@ -31,7 +31,7 @@ export function CollapsibleSection({
   return (
     <Card
       className={cn(
-        "rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0",
+        "panel-surface rounded-3xl py-0",
         className
       )}
     >
@@ -41,28 +41,28 @@ export function CollapsibleSection({
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
           className={cn(
-            "flex w-full items-start justify-between gap-4 border-b border-transparent p-5 text-left transition-colors hover:bg-[#172033]/40",
+            "flex w-full items-start justify-between gap-4 border-b border-transparent px-5 py-5 text-left transition-colors hover:bg-[#172033]/35 sm:px-6",
             open && "border-[#243047]"
           )}
         >
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-[17px] font-semibold text-[#E5E7EB]">
+            <CardTitle className="text-[18px] font-semibold text-[#F8FAFC]">
               {title}
             </CardTitle>
             {description ? (
-              <p className="mt-1 text-[14px] leading-6 text-[#9CA3AF]">
+              <p className="mt-1.5 text-[14px] leading-6 text-[#94A3B8]">
                 {description}
               </p>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-3">
             {headerAccessory}
-            <div className="flex items-center gap-1.5 text-[13px] text-[#9CA3AF]">
+            <div className="hidden items-center gap-1.5 text-[13px] text-[#94A3B8] sm:flex">
               <span>{open ? "Hide" : "Show"}</span>
               <ChevronDown
                 aria-hidden="true"
                 className={cn(
-                  "size-4 text-[#9CA3AF] transition-transform",
+                  "size-4 text-[#94A3B8] transition-transform",
                   open && "rotate-180"
                 )}
               />

@@ -46,14 +46,14 @@ function ChartCard({
   footer?: ReactNode
 }) {
   return (
-    <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
+    <Card className="panel-surface rounded-3xl py-0">
       <CardHeader className="border-b border-[#243047] p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <CardTitle className="text-[17px] font-semibold text-[#E5E7EB]">
+            <CardTitle className="text-[18px] font-semibold text-[#F8FAFC]">
               {title}
             </CardTitle>
-            <p className="mt-1.5 text-[14px] leading-6 text-[#9CA3AF]">
+            <p className="mt-1.5 text-[14px] leading-6 text-[#94A3B8]">
               {description}
             </p>
           </div>
