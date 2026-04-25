@@ -834,8 +834,8 @@ function MessageBubble({
       className={cn(
         "rounded-[14px]",
         isSupplier
-          ? "ml-auto flex max-w-[78%] items-start gap-3"
-          : "mr-auto flex max-w-[84%] items-start gap-3"
+          ? "ml-auto flex w-fit max-w-[78%] items-start gap-3"
+          : "mr-auto flex w-fit max-w-[84%] items-start gap-3"
       )}
     >
       {!isSupplier ? (

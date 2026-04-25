@@ -599,7 +599,7 @@ function isResolvedAiCheck(
   const checkName = check.checkName.toLowerCase()
   const actualValue = normalizeComparableText(check.actualValue)
 
-  if (checkName === "ai_amount_mismatch") {
+  if (checkName === "ai_amount_mismatch" || checkName === "amount_mismatch") {
     return amountMatchesExpectedRange(
       context.amount,
       context.expectedAmountMin,
@@ -608,7 +608,7 @@ function isResolvedAiCheck(
     )
   }
 
-  if (checkName === "ai_quantity_mismatch" || checkName === "ai_missing_quantity") {
+  if (checkName === "ai_quantity_mismatch" || checkName === "quantity_mismatch" || checkName === "ai_missing_quantity" || checkName === "missing_quantity") {
     return (
       context.invoiceQuantity > 0 &&
       context.expectedQuantity > 0 &&
@@ -616,7 +616,7 @@ function isResolvedAiCheck(
     )
   }
 
-  if (checkName === "ai_missing_supplier" || checkName === "ai_supplier_mismatch") {
+  if (checkName === "ai_missing_supplier" || checkName === "missing_supplier" || checkName === "ai_supplier_mismatch" || checkName === "supplier_mismatch") {
     return (
       normalizeComparableText(context.currentSupplierName) !== "" &&
       normalizeComparableText(context.currentSupplierName) ===
@@ -624,19 +624,19 @@ function isResolvedAiCheck(
     )
   }
 
-  if (checkName === "ai_missing_payment_terms") {
+  if (checkName === "ai_missing_payment_terms" || checkName === "missing_payment_terms") {
     return normalizeComparableText(context.paymentTerms) !== "not provided"
   }
 
-  if (checkName === "ai_missing_bank_details" || checkName === "ai_bank_mismatch") {
+  if (checkName === "ai_missing_bank_details" || checkName === "missing_bank_details" || checkName === "ai_bank_mismatch" || checkName === "bank_mismatch") {
     return normalizeComparableText(context.bankDetails) !== "not provided"
   }
 
-  if (checkName === "ai_missing_field" && actualValue.includes("line item")) {
+  if ((checkName === "ai_missing_field" || checkName === "missing_field") && actualValue.includes("line item")) {
     return context.lineItemCount > 0
   }
 
-  if (checkName === "ai_missing_field" && actualValue.includes("quantity is 0")) {
+  if ((checkName === "ai_missing_field" || checkName === "missing_field") && actualValue.includes("quantity is 0")) {
     return (
       context.invoiceQuantity > 0 &&
       context.expectedQuantity > 0 &&
@@ -644,11 +644,27 @@ function isResolvedAiCheck(
     )
   }
 
-  if (checkName === "ai_suspicious_value" && actualValue.includes("currency mismatch")) {
+  if ((checkName === "ai_suspicious_value" || checkName === "suspicious_value") && actualValue.includes("currency mismatch")) {
     return (
       normalizeComparableText(context.currentCurrency) ===
       normalizeComparableText(context.expectedCurrency)
     )
+  }
+
+  if ((checkName === "ai_suspicious_value" || checkName === "suspicious_value") && (actualValue.includes("amount") || actualValue.includes("price") || actualValue.includes("total"))) {
+    return (
+      context.amount > 0 &&
+      amountMatchesExpectedRange(
+        context.amount,
+        context.expectedAmountMin,
+        context.expectedAmountMax,
+        context.negotiatedAmount
+      )
+    )
+  }
+
+  if ((checkName === "ai_suspicious_value" || checkName === "suspicious_value") && actualValue.includes("quantity")) {
+    return context.invoiceQuantity > 0 && context.invoiceQuantity === context.expectedQuantity
   }
 
   if (checkName.startsWith("ai_other_") && actualValue.includes("invoice number mismatch")) {
