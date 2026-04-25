@@ -10,7 +10,7 @@ from app.ai.invoice_analysis import analyze_invoice
 from app.ai.service import generate_copilot_response
 from app.ai.threshold_analysis import run_threshold_analysis
 from app.ai.restock_analysis import run_restock_analysis
-from app.core.config import ANTHROPIC_BASE_URL, ANTHROPIC_MODEL
+from app.core.config import AI_PROVIDER, CURRENT_AI_BASE_URL, CURRENT_AI_MODEL
 
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -55,8 +55,9 @@ class InvoiceAnalysisRequest(BaseModel):
 def ai_status():
     return {
         "configured": is_ai_configured(),
-        "base_url": ANTHROPIC_BASE_URL,
-        "model": ANTHROPIC_MODEL,
+        "provider": AI_PROVIDER,
+        "base_url": CURRENT_AI_BASE_URL,
+        "model": CURRENT_AI_MODEL,
     }
 
 
@@ -65,7 +66,7 @@ async def copilot(payload: CopilotRequest):
     if not is_ai_configured():
         raise HTTPException(
             status_code=503,
-            detail="AI model is not configured. Add ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY to backend/.env.",
+            detail="AI model is not configured. Add Gemini or Anthropic credentials to backend/.env.",
         )
 
     try:
@@ -89,7 +90,7 @@ async def threshold_analysis(payload: ThresholdAnalysisRequest):
     if not is_ai_configured():
         raise HTTPException(
             status_code=503,
-            detail="AI model is not configured. Add ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY to backend/.env.",
+            detail="AI model is not configured. Add Gemini or Anthropic credentials to backend/.env.",
         )
 
     try:
@@ -105,8 +106,8 @@ async def invoice_analysis(payload: InvoiceAnalysisRequest):
     logger.info(
         "🔥 AI route hit: /api/v1/ai/invoice-analysis configured=%s base_url=%s model=%s key=%s",
         is_ai_configured(),
-        ANTHROPIC_BASE_URL,
-        ANTHROPIC_MODEL,
+        CURRENT_AI_BASE_URL,
+        CURRENT_AI_MODEL,
         masked_ai_secret(),
     )
     logger.info(
@@ -122,7 +123,7 @@ async def invoice_analysis(payload: InvoiceAnalysisRequest):
     if not is_ai_configured():
         raise HTTPException(
             status_code=503,
-            detail="AI model is not configured. Add ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY to backend/.env.",
+            detail="AI model is not configured. Add Gemini or Anthropic credentials to backend/.env.",
         )
 
     try:
@@ -141,7 +142,7 @@ async def restock_analysis():
     if not is_ai_configured():
         raise HTTPException(
             status_code=503,
-            detail="AI model is not configured. Add ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY to backend/.env.",
+            detail="AI model is not configured. Add Gemini or Anthropic credentials to backend/.env.",
         )
 
     try:

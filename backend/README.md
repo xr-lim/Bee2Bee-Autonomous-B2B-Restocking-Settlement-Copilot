@@ -52,10 +52,11 @@ existing product, supplier conversation, and invoice data.
 Add these variables to `backend/.env`:
 
 ```env
-ANTHROPIC_BASE_URL=https://api.ilmu.ai/anthropic
-ANTHROPIC_AUTH_TOKEN=
-ANTHROPIC_MODEL=ilmu-glm-5.1
-AI_MAX_TOKENS=1200
+AI_PROVIDER=gemini
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+AI_MAX_TOKENS=10000
 AI_TEMPERATURE=0.2
 AI_TIMEOUT_SECONDS=60
 ```

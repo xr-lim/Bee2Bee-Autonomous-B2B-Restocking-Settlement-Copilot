@@ -237,7 +237,7 @@ async def run_restock_ai_smoke_test() -> dict[str, Any]:
     response = await create_message(
         prompt=prompt,
         system_prompt="Return valid JSON only. No markdown.",
-        model="ilmu-glm-5.1",
+        model="gemini-2.5-flash",
         max_tokens=64,
         temperature=0,
     )
@@ -333,7 +333,7 @@ async def _run_restock_analysis_agent_for_sku(
         response = await create_message(
             prompt=prompt,
             system_prompt="You are a restock planning assistant. Return valid JSON only. No markdown.",
-            model="ilmu-glm-5.1",
+            model="gemini-2.5-flash",
             max_tokens=512,
             temperature=0,
         )
