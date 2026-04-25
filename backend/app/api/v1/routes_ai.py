@@ -80,3 +80,14 @@ async def threshold_analysis(payload: ThresholdAnalysisRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/debug/prompts")
+def get_debug_prompts():
+    from app.ai.service import SYSTEM_PROMPT as COPILOT_SYSTEM_PROMPT
+    from app.ai.tools import NEGOTIATION_SYSTEM_PROMPT
+    
+    return {
+        "copilot_system_prompt": COPILOT_SYSTEM_PROMPT,
+        "negotiation_system_prompt": NEGOTIATION_SYSTEM_PROMPT
+    }

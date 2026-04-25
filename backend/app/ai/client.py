@@ -87,6 +87,14 @@ async def create_message(
                 )
                 try:
                     response.raise_for_status()
+                    data = response.json()
+                    
+                    # Log token usage if provided by the gateway
+                    usage = data.get("usage", {})
+                    if usage:
+                        print(f"[DEBUG] Token Usage: {json.dumps(usage)}")
+                        
+                    return data
                 except httpx.HTTPStatusError as exc:
                     # Log the gateway's validation/error body for visibility (Ilmu/Anthropic often
                     # returns helpful JSON here, but sometimes it's plain text).

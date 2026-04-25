@@ -43,96 +43,52 @@ async def run_negotiation_agent(conversation_id: str, supplier_message: str | No
     tools = [
         {
             "name": "get_restock_context",
-            "description": "Get the context for a restock request including target prices and product details",
+            "description": "Get restock context",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "request_id": {
-                        "type": "string",
-                        "description": "Exact restock request ID to look up"
-                    },
-                    "conversation_id": {
-                        "type": "string",
-                        "description": "Exact conversation ID to look up if the restock request ID is not available"
-                    }
-                },
-                "oneOf": [
-                    {"required": ["request_id"]},
-                    {"required": ["conversation_id"]}
-                ]
+                    "request_id": { "type": "string" },
+                    "conversation_id": { "type": "string" }
+                }
             }
         },
         {
             "name": "update_conversation_state",
-            "description": "Update the state and latest message of a conversation",
+            "description": "Update state",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "conversation_id": {
-                        "type": "string",
-                        "description": "Exact conversation ID to update"
-                    },
-                    "new_state": {
-                        "type": "string",
-                        "enum": ["new_input", "needs_analysis", "counter_offer", "waiting_reply", "accepted", "closed"],
-                        "description": "The new state for the conversation"
-                    },
-                    "message": {
-                        "type": "string",
-                        "description": "The latest message content to store"
-                    }
+                    "conversation_id": { "type": "string" },
+                    "new_state": { "type": "string" },
+                    "message": { "type": "string" }
                 },
                 "required": ["conversation_id", "new_state", "message"]
             }
         },
         {
             "name": "create_final_order",
-            "description": "Create a final confirmed order after successful negotiation",
+            "description": "Create order",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "restock_request_id": {
-                        "type": "string",
-                        "description": "The restock request ID that this order fulfills"
-                    },
-                    "supplier_id": {
-                        "type": "string",
-                        "description": "The supplier ID for this order"
-                    },
-                    "final_price": {
-                        "type": "number",
-                        "description": "The final negotiated price per unit"
-                    },
-                    "final_qty": {
-                        "type": "integer",
-                        "description": "The final quantity to order"
-                    }
+                    "restock_request_id": { "type": "string" },
+                    "supplier_id": { "type": "string" },
+                    "final_price": { "type": "number" },
+                    "final_qty": { "type": "integer" }
                 },
                 "required": ["restock_request_id", "supplier_id", "final_price", "final_qty"]
             }
         },
         {
             "name": "record_invoice",
-            "description": "Record a new invoice from an uploaded file",
+            "description": "Record invoice",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "order_id": {
-                        "type": "string",
-                        "description": "The order ID that this invoice is for"
-                    },
-                    "amount": {
-                        "type": "number",
-                        "description": "The total amount of the invoice"
-                    },
-                    "invoice_number": {
-                        "type": "string",
-                        "description": "The supplier's invoice number"
-                    },
-                    "file_url": {
-                        "type": "string",
-                        "description": "The URL to the uploaded invoice file"
-                    }
+                    "order_id": { "type": "string" },
+                    "amount": { "type": "number" },
+                    "invoice_number": { "type": "string" },
+                    "file_url": { "type": "string" }
                 },
                 "required": ["order_id", "amount", "invoice_number", "file_url"]
             }
@@ -145,6 +101,7 @@ async def run_negotiation_agent(conversation_id: str, supplier_message: str | No
     # Tool-calling loop
     max_iterations = 10  # Prevent infinite loops
     iteration = 0
+    must_fetch_context = True
 
     allowed_block_types = {"text", "image", "tool_use", "tool_result"}
 
@@ -238,12 +195,20 @@ async def run_negotiation_agent(conversation_id: str, supplier_message: str | No
             "The system handles tool execution separately."
         )
 
+        tool_choice_payload: dict[str, Any]
+        if must_fetch_context:
+            # Force the model to call get_restock_context first so it always has target min/max.
+            tool_choice_payload = {"type": "tool", "name": "get_restock_context"}
+        else:
+            tool_choice_payload = {"type": "auto"}
+
         # Create the AI message with tools
+        
         response = await create_message(
             system_prompt=system_prompt,
             messages=sanitize_messages(messages),
             tools=tools,
-            tool_choice={"type": "auto"}
+            tool_choice=tool_choice_payload,
         )
 
         # Check if the response contains tool calls
@@ -269,11 +234,18 @@ async def run_negotiation_agent(conversation_id: str, supplier_message: str | No
             had_error = False
             for tool_call in tool_calls:
                 tool_name = tool_call.get("name")
-                tool_input = tool_call.get("input", {})
+                tool_input = tool_call.get("input", {}) or {}
 
                 try:
                     if tool_name == "get_restock_context":
+                        # If the model forgot to provide args, default to the current conversation_id.
+                        if (
+                            not isinstance(tool_input, dict)
+                            or ("request_id" not in tool_input and "conversation_id" not in tool_input)
+                        ):
+                            tool_input = {"conversation_id": conversation_id}
                         result = get_restock_context.invoke(tool_input)
+                        must_fetch_context = False
                     elif tool_name == "update_conversation_state":
                         result = update_conversation_state.invoke(tool_input)
                     elif tool_name == "create_final_order":
@@ -297,7 +269,7 @@ async def run_negotiation_agent(conversation_id: str, supplier_message: str | No
 
                     tool_results.append({
                         "tool_use_id": tool_call.get("id"),
-                        "content": str(result),
+                        "content": (json.dumps(result, default=str)[:8000] if result is not None else ""),
                         "is_error": False,
                     })
 
@@ -319,8 +291,6 @@ async def run_negotiation_agent(conversation_id: str, supplier_message: str | No
                     **({"is_error": True} if result["is_error"] else {}),
                 })
 
-            print(f"🛠️ [DEBUG] Tool Executed: {', '.join([tool_call.get('name', '<unknown>') for tool_call in tool_calls])}")
-            print(f"📦 [DEBUG] Tool Payload Sent to AI: {tool_result_content}")
 
             messages.append({"role": "user", "content": tool_result_content})
 
