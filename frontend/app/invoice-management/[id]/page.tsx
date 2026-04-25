@@ -200,7 +200,7 @@ export default async function InvoiceDetailPage({
           value={
             invoice.orderId
               ? `${invoice.orderId}${invoice.orderStatus ? ` · ${invoice.orderStatus}` : ""}`
-              : "Pending negotiation"
+              : invoice.workflowId ? "Pending negotiation" : "Not linked (Direct upload)"
           }
         />
         <SummaryTile label="Workflow ID" value={invoice.workflowId} />

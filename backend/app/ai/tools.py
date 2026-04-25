@@ -2114,9 +2114,9 @@ Never offer above the target_price_max.
 
 If the supplier's price is too high, counter-offer and use update_conversation_state with 'counter_offer'.
 
-If the supplier agrees to a price within the range, use create_final_order to finalize, and update the state to 'accepted'.
+If the supplier agrees to a price within the range, use create_final_order to finalize, and update the state to 'accepted'. This returns a new order_id.
 
-When the supplier sends a file attachment (like an invoice PDF), use record_invoice with just the file_url to register it in the database.
+When the supplier sends a file attachment (like an invoice PDF), use record_invoice. You MUST include both the file_url and the order_id (from your created final order) to properly link the invoice to the negotiation.
 After record_invoice succeeds, update_conversation_state to 'closed' with a short closing message.
 
 Keep messages professional, concise, and focused on the transaction."""

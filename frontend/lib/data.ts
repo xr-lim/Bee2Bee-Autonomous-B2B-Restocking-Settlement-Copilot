@@ -571,7 +571,7 @@ function amountMatchesExpectedRange(
   fallbackAmount: number
 ) {
   if (expectedAmountMin != null && expectedAmountMax != null) {
-    return amount >= expectedAmountMin && amount <= expectedAmountMax
+    return amount >= expectedAmountMin - 0.005 && amount <= expectedAmountMax + 0.005
   }
 
   return Math.abs(amount - fallbackAmount) < 0.005
@@ -642,6 +642,10 @@ function isResolvedAiCheck(
       context.expectedQuantity > 0 &&
       context.invoiceQuantity === context.expectedQuantity
     )
+  }
+
+  if ((checkName === "ai_missing_field" || checkName === "missing_field") && actualValue.includes("currency")) {
+    return normalizeComparableText(context.currentCurrency) !== "" && normalizeComparableText(context.currentCurrency) !== "null"
   }
 
   if ((checkName === "ai_suspicious_value" || checkName === "suspicious_value") && actualValue.includes("currency mismatch")) {
@@ -1315,25 +1319,26 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
     const invoiceQuantity =
       invoice.quantity ??
       lines.reduce((total, line) => total + Number(line.quantity), 0)
-    const expectedQuantity = submittedOrder?.finalQuantity ?? workflow?.quantity ?? invoiceQuantity
+    const expectedQuantity = submittedOrder?.finalQuantity ?? workflow?.quantity ?? 0
     const expectedUnitPrice =
       submittedOrder?.finalPrice != null ? Number(submittedOrder.finalPrice) : null
     const expectedAmountMin =
-      expectedUnitPrice != null && expectedQuantity != null
+      expectedUnitPrice != null && expectedQuantity > 0
         ? Number((expectedUnitPrice * expectedQuantity).toFixed(2))
-        : workflow?.targetPriceMin != null && expectedQuantity != null
+        : workflow?.targetPriceMin != null && expectedQuantity > 0
           ? Number(workflow.targetPriceMin) * expectedQuantity
           : null
     const expectedAmountMax =
-      expectedUnitPrice != null && expectedQuantity != null
+      expectedUnitPrice != null && expectedQuantity > 0
         ? Number((expectedUnitPrice * expectedQuantity).toFixed(2))
-        : workflow?.targetPriceMax != null && expectedQuantity != null
+        : workflow?.targetPriceMax != null && expectedQuantity > 0
           ? Number(workflow.targetPriceMax) * expectedQuantity
           : null
     const negotiatedAmount = (() => {
       if (expectedAmountMax != null) return expectedAmountMax
       if (expectedAmountMin != null) return expectedAmountMin
-      if (subtotal > 0) return subtotal
+      if (subtotal > 0 && (submittedOrder || workflow)) return subtotal
+      if (!submittedOrder && !workflow) return 0
       return Number(invoice.amount)
     })()
     const expectedAmountLabel =
@@ -1341,7 +1346,7 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
         ? expectedAmountMin === expectedAmountMax
           ? formatCurrencyLabel(invoice.currency, expectedAmountMin)
           : `${formatCurrencyLabel(invoice.currency, expectedAmountMin)} - ${formatCurrencyLabel(invoice.currency, expectedAmountMax)}`
-        : formatCurrencyLabel(invoice.currency, negotiatedAmount)
+        : (submittedOrder || workflow) ? formatCurrencyLabel(invoice.currency, negotiatedAmount) : "N/A (No PO)"
     const nonPassingChecks = activeChecks.filter((check) => check.result !== "passed")
     const expectedCurrency =
       typeof invoice.currency === "string" && /^[A-Za-z]{3}$/.test(invoice.currency.trim())
@@ -1358,7 +1363,7 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
     const expectedSupplierName =
       orderSupplierName ??
       activeChecks.find((check) => /supplier/i.test(check.checkName))?.expectedValue ??
-      currentSupplierName
+      ((submittedOrder || workflow) ? currentSupplierName : "N/A (No PO)")
     const unresolvedChecks = nonPassingChecks.filter(
       (check) =>
         !isResolvedAiCheck(check, {
@@ -1379,8 +1384,19 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
         })
     )
     const baseApprovalState = displayApprovalState(invoice.approvalState)
-    const validationStatus = displayValidationStatus(invoice.validationStatus)
-    const riskLevel = displayRiskLevel(invoice.riskLevel)
+    const baseValidationStatus = displayValidationStatus(invoice.validationStatus)
+    const baseRiskLevel = displayRiskLevel(invoice.riskLevel)
+    
+    const riskLevel =
+      unresolvedChecks.length === 0 && baseRiskLevel !== "Low Risk"
+        ? "Low Risk"
+        : baseRiskLevel
+
+    const validationStatus =
+      unresolvedChecks.length === 0 && baseValidationStatus !== "Validated"
+        ? "Validated"
+        : baseValidationStatus
+
     const approvalState =
       baseApprovalState === "Waiting Approval" && riskLevel !== "Low Risk"
         ? "Needs Review"
@@ -1388,15 +1404,22 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
     const missingFields =
       validationStatus === "Missing Information" ||
       unresolvedChecks.some((check) => /^ai_missing_/i.test(check.checkName))
-    const amountMismatch = unresolvedChecks.some((check) =>
-      /amount|price|suspicious/i.test(check.checkName)
-    )
+    const amountMismatch = 
+      expectedAmountLabel === "N/A (No PO)" ||
+      unresolvedChecks.some((check) =>
+        /amount|price|suspicious/i.test(check.checkName) ||
+        (/missing_field/i.test(check.checkName) && /amount/i.test(check.actualValue ?? ""))
+      )
     const bankDetailsIssue = unresolvedChecks.some((check) =>
-      /bank/i.test(check.checkName)
+      /bank/i.test(check.checkName) ||
+      (/missing_field/i.test(check.checkName) && /bank/i.test(check.actualValue ?? ""))
     )
-    const supplierInconsistency = unresolvedChecks.some((check) =>
-      /supplier/i.test(check.checkName)
-    )
+    const supplierInconsistency = 
+      expectedSupplierName === "N/A (No PO)" ||
+      unresolvedChecks.some((check) =>
+        /supplier/i.test(check.checkName) ||
+        (/missing_field/i.test(check.checkName) && /supplier/i.test(check.actualValue ?? ""))
+      )
     const riskReason =
       invoice.aiSummary ??
       unresolvedChecks[0]?.actualValue ??

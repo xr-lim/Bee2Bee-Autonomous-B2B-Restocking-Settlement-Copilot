@@ -307,7 +307,7 @@ function InvoiceWorkCard({
           <p className="mt-1 text-[13px] font-medium text-[#E5E7EB]">
             {invoice.orderId
               ? `${invoice.orderId}${invoice.orderStatus ? ` · ${invoice.orderStatus}` : ""}`
-              : "Pending negotiation"}
+              : invoice.workflowId ? "Pending negotiation" : "Not linked (Direct upload)"}
           </p>
         </div>
         <div>

@@ -38,7 +38,7 @@ const WORKFLOW_STEPS = [
   "Read stock",
   "Prepare supplier",
   "Send order",
-  "Negotiation process",
+  "The negotiation",
   "Invoice",
   "Approval",
 ] as const
