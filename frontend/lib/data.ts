@@ -257,11 +257,16 @@ type RawInvoice = {
   workflowId?: string | null
   sourceType: string
   fileUrl?: string | null
+  extractedText?: string | null
+  processingStatus?: "idle" | "extracting" | "analyzing"
   amount: number
-  currency: "USD" | "MYR" | "SGD"
+  currency: string
   quantity?: number | null
   paymentTerms?: string | null
   bankDetails?: string | null
+  riskConfidence?: number | null
+  aiSummary?: string | null
+  aiLastAnalyzedAt?: string | null
   validationStatus: string
   riskLevel: string
   approvalState: string
@@ -503,6 +508,121 @@ function displayRiskLevel(level: string): Invoice["riskLevel"] {
   }
 
   return levelMap[level] ?? "Medium Risk"
+}
+
+function formatCurrencyLabel(
+  currency: Invoice["currency"],
+  value: number
+) {
+  return `${currency} ${value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+function humanizeCheckName(checkName: string) {
+  return checkName
+    .replace(/^ai_/, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function normalizeComparableText(value?: string | null) {
+  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ")
+}
+
+function amountMatchesExpectedRange(
+  amount: number,
+  expectedAmountMin: number | null,
+  expectedAmountMax: number | null,
+  fallbackAmount: number
+) {
+  if (expectedAmountMin != null && expectedAmountMax != null) {
+    return amount >= expectedAmountMin && amount <= expectedAmountMax
+  }
+
+  return Math.abs(amount - fallbackAmount) < 0.005
+}
+
+function isResolvedAiCheck(
+  check: RawInvoiceValidationResult,
+  context: {
+    amount: number
+    negotiatedAmount: number
+    expectedAmountMin: number | null
+    expectedAmountMax: number | null
+    expectedQuantity: number
+    invoiceQuantity: number
+    currentCurrency: string
+    expectedCurrency: string
+    currentSupplierName: string
+    expectedSupplierName: string
+    bankDetails: string
+    paymentTerms: string
+    invoiceNumber: string
+    lineItemCount: number
+  }
+) {
+  const checkName = check.checkName.toLowerCase()
+  const actualValue = normalizeComparableText(check.actualValue)
+
+  if (checkName === "ai_amount_mismatch") {
+    return amountMatchesExpectedRange(
+      context.amount,
+      context.expectedAmountMin,
+      context.expectedAmountMax,
+      context.negotiatedAmount
+    )
+  }
+
+  if (checkName === "ai_quantity_mismatch" || checkName === "ai_missing_quantity") {
+    return (
+      context.invoiceQuantity > 0 &&
+      context.expectedQuantity > 0 &&
+      context.invoiceQuantity === context.expectedQuantity
+    )
+  }
+
+  if (checkName === "ai_missing_supplier" || checkName === "ai_supplier_mismatch") {
+    return (
+      normalizeComparableText(context.currentSupplierName) !== "" &&
+      normalizeComparableText(context.currentSupplierName) ===
+        normalizeComparableText(context.expectedSupplierName)
+    )
+  }
+
+  if (checkName === "ai_missing_payment_terms") {
+    return normalizeComparableText(context.paymentTerms) !== "not provided"
+  }
+
+  if (checkName === "ai_missing_bank_details" || checkName === "ai_bank_mismatch") {
+    return normalizeComparableText(context.bankDetails) !== "not provided"
+  }
+
+  if (checkName === "ai_missing_field" && actualValue.includes("line item")) {
+    return context.lineItemCount > 0
+  }
+
+  if (checkName === "ai_missing_field" && actualValue.includes("quantity is 0")) {
+    return (
+      context.invoiceQuantity > 0 &&
+      context.expectedQuantity > 0 &&
+      context.invoiceQuantity === context.expectedQuantity
+    )
+  }
+
+  if (checkName === "ai_suspicious_value" && actualValue.includes("currency mismatch")) {
+    return (
+      normalizeComparableText(context.currentCurrency) ===
+      normalizeComparableText(context.expectedCurrency)
+    )
+  }
+
+  if (checkName.startsWith("ai_other_") && actualValue.includes("invoice number mismatch")) {
+    return !context.invoiceNumber.toUpperCase().startsWith("UPL-")
+  }
+
+  return false
 }
 
 function displaySourceType(sourceType: string): Invoice["sourceType"] {
@@ -1008,12 +1128,15 @@ function mapMessages(
 
 function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[] {
   const productById = new Map(rows.products.map((product) => [product.id, product]))
+  const workflowById = new Map(rows.workflows.map((workflow) => [workflow.id, workflow]))
 
   return rows.invoices.map((invoice) => {
     const lines = rows.invoiceProducts.filter((line) => line.invoiceId === invoice.id)
     const checks = rows.invoiceValidationResults.filter(
       (check) => check.invoiceId === invoice.id
     )
+    const aiChecks = checks.filter((check) => /^ai_/i.test(check.checkName))
+    const activeChecks = aiChecks.length > 0 ? aiChecks : checks
     const actions = rows.invoiceActions
       .filter((action) => action.invoiceId === invoice.id)
       .sort(
@@ -1024,22 +1147,89 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
     const linkedSkus = lines
       .map((line) => productById.get(line.productId)?.sku)
       .filter((sku): sku is string => Boolean(sku))
+    const workflow = invoice.workflowId ? workflowById.get(invoice.workflowId) : undefined
     const subtotal = lines.reduce((total, line) => total + Number(line.subtotal), 0)
-    const quantity =
+    const invoiceQuantity =
       invoice.quantity ??
       lines.reduce((total, line) => total + Number(line.quantity), 0)
-    const nonPassingChecks = checks.filter((check) => check.result !== "passed")
-    const approvalState = displayApprovalState(invoice.approvalState)
+    const expectedQuantity = workflow?.quantity ?? invoiceQuantity
+    const expectedAmountMin =
+      workflow?.targetPriceMin != null && expectedQuantity != null
+        ? Number(workflow.targetPriceMin) * expectedQuantity
+        : null
+    const expectedAmountMax =
+      workflow?.targetPriceMax != null && expectedQuantity != null
+        ? Number(workflow.targetPriceMax) * expectedQuantity
+        : null
+    const negotiatedAmount = (() => {
+      if (expectedAmountMax != null) return expectedAmountMax
+      if (expectedAmountMin != null) return expectedAmountMin
+      if (subtotal > 0) return subtotal
+      return Number(invoice.amount)
+    })()
+    const expectedAmountLabel =
+      expectedAmountMin != null && expectedAmountMax != null
+        ? expectedAmountMin === expectedAmountMax
+          ? formatCurrencyLabel(invoice.currency, expectedAmountMin)
+          : `${formatCurrencyLabel(invoice.currency, expectedAmountMin)} - ${formatCurrencyLabel(invoice.currency, expectedAmountMax)}`
+        : formatCurrencyLabel(invoice.currency, negotiatedAmount)
+    const nonPassingChecks = activeChecks.filter((check) => check.result !== "passed")
+    const expectedCurrency =
+      typeof invoice.currency === "string" && /^[A-Za-z]{3}$/.test(invoice.currency.trim())
+        ? invoice.currency.trim().toUpperCase()
+        : "MYR"
+    const currentSupplierName =
+      rows.suppliers.find((supplier) => supplier.id === invoice.supplierId)?.name ??
+      "Unknown supplier"
+    const expectedSupplierName =
+      activeChecks.find((check) => /supplier/i.test(check.checkName))?.expectedValue ??
+      currentSupplierName
+    const unresolvedChecks = nonPassingChecks.filter(
+      (check) =>
+        !isResolvedAiCheck(check, {
+          amount: Number(invoice.amount),
+          negotiatedAmount,
+          expectedAmountMin,
+          expectedAmountMax,
+          expectedQuantity,
+          invoiceQuantity,
+          currentCurrency: invoice.currency,
+          expectedCurrency,
+          currentSupplierName,
+          expectedSupplierName,
+          bankDetails: invoice.bankDetails ?? "Not provided",
+          paymentTerms: invoice.paymentTerms ?? "Not provided",
+          invoiceNumber: invoice.invoiceNumber,
+          lineItemCount: lines.length,
+        })
+    )
+    const baseApprovalState = displayApprovalState(invoice.approvalState)
     const validationStatus = displayValidationStatus(invoice.validationStatus)
     const riskLevel = displayRiskLevel(invoice.riskLevel)
-    const missingFields = validationStatus === "Missing Information"
-    const amountMismatch =
-      validationStatus === "Mismatch Detected" ||
-      nonPassingChecks.some((check) => /amount|freight|terms/i.test(check.checkName))
+    const approvalState =
+      baseApprovalState === "Waiting Approval" && riskLevel !== "Low Risk"
+        ? "Needs Review"
+        : baseApprovalState
+    const missingFields =
+      validationStatus === "Missing Information" ||
+      unresolvedChecks.some((check) => /^ai_missing_/i.test(check.checkName))
+    const amountMismatch = unresolvedChecks.some((check) =>
+      /amount|price|suspicious/i.test(check.checkName)
+    )
+    const bankDetailsIssue = unresolvedChecks.some((check) =>
+      /bank/i.test(check.checkName)
+    )
+    const supplierInconsistency = unresolvedChecks.some((check) =>
+      /supplier/i.test(check.checkName)
+    )
     const riskReason =
-      nonPassingChecks[0]?.actualValue ??
+      invoice.aiSummary ??
+      unresolvedChecks[0]?.actualValue ??
       actions.at(-1)?.note ??
       "All available invoice checks passed."
+    const issueSummaries = unresolvedChecks.map((check) =>
+      check.actualValue?.trim() || humanizeCheckName(check.checkName)
+    )
 
     return {
       id: invoice.id,
@@ -1049,9 +1239,9 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
       workflowId: invoice.workflowId ?? "",
       invoiceNumber: invoice.invoiceNumber,
       amount: Number(invoice.amount),
-      negotiatedAmount: subtotal || Number(invoice.amount),
-      expectedQuantity: quantity,
-      invoiceQuantity: quantity,
+      negotiatedAmount,
+      expectedQuantity,
+      invoiceQuantity,
       unitPrice: Number(lines[0]?.unitPrice ?? 0),
       subtotal: subtotal || Number(invoice.amount),
       currency: invoice.currency,
@@ -1068,20 +1258,39 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
       validationStatus,
       approvalState,
       sourceType: displaySourceType(invoice.sourceType),
+      fileUrl: invoice.fileUrl ?? undefined,
       fileName: fileNameFromUrl(invoice.fileUrl),
       fileSize: "Stored file",
       bankDetails: invoice.bankDetails ?? "Not provided",
       paymentTerms: invoice.paymentTerms ?? "Not provided",
-      riskConfidence: riskLevel === "High Risk" ? 91 : riskLevel === "Medium Risk" ? 84 : 96,
+      extractedText: invoice.extractedText ?? undefined,
+      processingStatus: invoice.processingStatus ?? "idle",
+      issueSummaries,
+      riskConfidence:
+        typeof invoice.riskConfidence === "number"
+          ? Number(invoice.riskConfidence)
+          : riskLevel === "High Risk"
+            ? 91
+            : riskLevel === "Medium Risk"
+              ? 84
+              : 96,
+      expectedAmountLabel,
+      expectedCurrency,
+      expectedSupplierName,
+      expectedBankDetails:
+        activeChecks.find((check) => /bank/i.test(check.checkName))?.expectedValue ??
+        "Supplier master",
+      expectedPaymentTerms:
+        activeChecks.find((check) => /payment_terms|payment terms/i.test(check.checkName))
+          ?.expectedValue ?? undefined,
+      aiLastAnalyzedAt: invoice.aiLastAnalyzedAt ?? undefined,
       flags: {
-        bankDetailsIssue: checks.some((check) => /bank/i.test(check.checkName) && check.result === "failed"),
+        bankDetailsIssue,
         amountMismatch,
         missingFields,
-        supplierInconsistency: checks.some(
-          (check) => /supplier/i.test(check.checkName) && check.result === "failed"
-        ),
+        supplierInconsistency,
       },
-      mismatches: nonPassingChecks.map((check) =>
+      mismatches: unresolvedChecks.map((check) =>
         [check.checkName.replace(/_/g, " "), check.actualValue]
           .filter(Boolean)
           .join(": ")

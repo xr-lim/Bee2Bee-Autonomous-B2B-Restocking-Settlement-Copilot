@@ -755,6 +755,7 @@ export const mockInvoices: Invoice[] = [
       missingFields: false,
       supplierInconsistency: false,
     },
+    issueSummaries: [],
     mismatches: [],
     history: [
       {
@@ -804,6 +805,10 @@ export const mockInvoices: Invoice[] = [
       missingFields: true,
       supplierInconsistency: false,
     },
+    issueSummaries: [
+      "Invoice total exceeds negotiated amount by $1,380",
+      "Freight cap missing from supplier conversation",
+    ],
     mismatches: [
       "Invoice total exceeds negotiated amount by $1,380",
       "Freight cap missing from supplier conversation",
@@ -856,6 +861,7 @@ export const mockInvoices: Invoice[] = [
       missingFields: false,
       supplierInconsistency: false,
     },
+    issueSummaries: [],
     mismatches: [],
     history: [
       {
@@ -905,6 +911,11 @@ export const mockInvoices: Invoice[] = [
       missingFields: true,
       supplierInconsistency: false,
     },
+    issueSummaries: [
+      "Bank details differ from supplier master",
+      "Payment terms differ from accepted MOQ exception",
+      "Subtotal exceeds negotiated amount by $1,110",
+    ],
     mismatches: [
       "Bank details differ from supplier master",
       "Payment terms differ from accepted MOQ exception",

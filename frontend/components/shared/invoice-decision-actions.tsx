@@ -4,11 +4,17 @@ import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
-import { setInvoiceDecisionAction } from "@/lib/actions"
+import {
+  approveInvoiceAction,
+  holdReviewInvoiceAction,
+  markInvoiceCompletedAction,
+  rejectInvoiceAction,
+} from "@/lib/actions"
 
 type InvoiceDecisionActionsProps = {
   invoiceId: string
   isCompleted: boolean
+  approvalState: "Waiting Approval" | "Needs Review" | "Blocked" | "Completed"
 }
 
 type Decision = "approve" | "hold" | "block" | "complete"
@@ -16,6 +22,7 @@ type Decision = "approve" | "hold" | "block" | "complete"
 export function InvoiceDecisionActions({
   invoiceId,
   isCompleted,
+  approvalState,
 }: InvoiceDecisionActionsProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -24,11 +31,25 @@ export function InvoiceDecisionActions({
   function submit(decision: Decision) {
     setError(null)
     startTransition(async () => {
-      const result = await setInvoiceDecisionAction({ invoiceId, decision })
+      const result =
+        decision === "approve"
+          ? await approveInvoiceAction(invoiceId)
+          : decision === "hold"
+            ? await holdReviewInvoiceAction(invoiceId)
+            : decision === "block"
+              ? await rejectInvoiceAction(invoiceId)
+              : await markInvoiceCompletedAction(invoiceId)
+
       if (!result.ok) {
         setError(result.message ?? "Could not update invoice.")
         return
       }
+
+      if (decision === "approve") {
+        router.push(`/invoice-management/${invoiceId}/payment`)
+        return
+      }
+
       router.refresh()
     })
   }
@@ -38,7 +59,7 @@ export function InvoiceDecisionActions({
       <div className="flex flex-wrap justify-end gap-2">
         <Button
           type="button"
-          disabled={isCompleted || isPending}
+          disabled={isCompleted || isPending || approvalState === "Blocked"}
           onClick={() => submit("approve")}
           className="h-11 rounded-[10px] bg-[#10B981] px-5 text-white hover:bg-[#059669] disabled:cursor-not-allowed disabled:bg-[#172033] disabled:text-[#6B7280]"
         >
@@ -54,7 +75,7 @@ export function InvoiceDecisionActions({
         </Button>
         <Button
           type="button"
-          disabled={isCompleted || isPending}
+          disabled={isCompleted || isPending || approvalState === "Blocked"}
           onClick={() => submit("block")}
           className="h-11 rounded-[10px] bg-[#EF4444] px-5 text-white hover:bg-[#DC2626] disabled:cursor-not-allowed disabled:bg-[#172033] disabled:text-[#6B7280]"
         >

@@ -256,11 +256,20 @@ create table public.invoices (
     source_type in ('pdf', 'image', 'email_attachment', 'upload')
   ),
   file_url text,
+  extracted_text text,
+  processing_status text not null default 'idle' check (
+    processing_status in ('idle', 'extracting', 'analyzing')
+  ),
   amount numeric(12, 2) not null check (amount >= 0),
-  currency text not null check (currency in ('USD', 'MYR', 'SGD')),
+  currency text not null check (currency ~ '^[A-Z]{3}$'),
   quantity integer check (quantity is null or quantity >= 0),
   payment_terms text,
   bank_details text,
+  risk_confidence integer check (
+    risk_confidence is null or (risk_confidence >= 0 and risk_confidence <= 100)
+  ),
+  ai_summary text,
+  ai_last_analyzed_at timestamptz,
   validation_status text not null check (
     validation_status in (
       'parsed',

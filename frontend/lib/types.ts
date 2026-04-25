@@ -218,7 +218,7 @@ export type Invoice = {
   invoiceQuantity: number
   unitPrice: number
   subtotal: number
-  currency: "USD" | "MYR" | "SGD"
+  currency: string
   risk: "low risk" | "waiting approval" | "needs review" | "blocked"
   riskLevel: "Low Risk" | "Medium Risk" | "High Risk"
   riskReason: string
@@ -229,11 +229,21 @@ export type Invoice = {
     | "Missing Information"
   approvalState: "Waiting Approval" | "Needs Review" | "Blocked" | "Completed"
   sourceType: "PDF" | "Image" | "Email Attachment" | "Upload"
+  fileUrl?: string | null
   fileName: string
   fileSize: string
   bankDetails: string
   paymentTerms: string
+  extractedText?: string
+  processingStatus?: "idle" | "extracting" | "analyzing"
+  issueSummaries: string[]
   riskConfidence: number
+  expectedAmountLabel?: string
+  expectedCurrency?: string
+  expectedSupplierName?: string
+  expectedBankDetails?: string
+  expectedPaymentTerms?: string
+  aiLastAnalyzedAt?: string
   flags: {
     bankDetailsIssue: boolean
     amountMismatch: boolean

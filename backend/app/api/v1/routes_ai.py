@@ -1,13 +1,19 @@
+from typing import Any
+import json
+import logging
+
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException
 
-from app.ai.client import is_ai_configured
+from app.ai.client import is_ai_configured, masked_ai_secret
+from app.ai.invoice_analysis import analyze_invoice
 from app.ai.service import generate_copilot_response
 from app.ai.threshold_analysis import run_threshold_analysis
 from app.core.config import ANTHROPIC_BASE_URL, ANTHROPIC_MODEL
 
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+logger = logging.getLogger(__name__)
 
 
 class CopilotRequest(BaseModel):
@@ -30,6 +36,17 @@ class ThresholdAnalysisRequest(BaseModel):
         ge=1,
         le=1000,
         description="Optional cap on automatically selected SKUs. If omitted, the backend analyzes all SKUs without pending requests.",
+    )
+
+
+class InvoiceAnalysisRequest(BaseModel):
+    invoice_data: dict[str, Any] = Field(
+        ...,
+        description="Minimal structured invoice data with actual values.",
+    )
+    expected_data: dict[str, Any] = Field(
+        ...,
+        description="Expected/reference values derived from workflows and supplier history.",
     )
 
 
@@ -78,5 +95,40 @@ async def threshold_analysis(payload: ThresholdAnalysisRequest):
         return await run_threshold_analysis(skus=payload.skus, limit=payload.limit)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/invoice-analysis")
+async def invoice_analysis(payload: InvoiceAnalysisRequest):
+    logger.info(
+        "🔥 AI route hit: /api/v1/ai/invoice-analysis configured=%s base_url=%s model=%s key=%s",
+        is_ai_configured(),
+        ANTHROPIC_BASE_URL,
+        ANTHROPIC_MODEL,
+        masked_ai_secret(),
+    )
+    logger.info(
+        "Incoming invoice-analysis payload: %s",
+        json.dumps(
+            {
+                "invoice_data": payload.invoice_data,
+                "expected_data": payload.expected_data,
+            },
+            default=str,
+        ),
+    )
+
+    if not is_ai_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="AI model is not configured. Add ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY to backend/.env.",
+        )
+
+    try:
+        return await analyze_invoice(
+            invoice_data=payload.invoice_data,
+            expected_data=payload.expected_data,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

@@ -2,10 +2,11 @@
 
 import Link from "next/link"
 import { ArrowRight, Inbox } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { FilterToolbar } from "@/components/shared/filter-toolbar"
+import { InvoiceProcessingTrigger } from "@/components/shared/invoice-ai-analysis-trigger"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -185,8 +186,63 @@ function InvoiceWorkCard({
   invoice: Invoice
   suppliers: Supplier[]
 }) {
+  const [localProcessingLabel, setLocalProcessingLabel] = useState<string | null>(null)
+  const shouldProcessInvoice =
+    invoice.processingStatus === "idle" &&
+    (!invoice.extractedText || !invoice.aiLastAnalyzedAt)
+
+  useEffect(() => {
+    if (invoice.processingStatus === "extracting") {
+      setLocalProcessingLabel("Extracting...")
+      return
+    }
+
+    if (invoice.processingStatus === "analyzing") {
+      setLocalProcessingLabel("Analyzing...")
+      return
+    }
+
+    if (invoice.aiLastAnalyzedAt) {
+      setLocalProcessingLabel(null)
+    }
+  }, [invoice.aiLastAnalyzedAt, invoice.processingStatus])
+
+  const processingLabel =
+    invoice.processingStatus === "extracting"
+      ? "Extracting..."
+      : invoice.processingStatus === "analyzing"
+        ? "Analyzing..."
+        : localProcessingLabel
+  const isProcessing = Boolean(processingLabel)
+  const processingDescription =
+    processingLabel === "Extracting..."
+      ? "OCR is extracting invoice text and repairing core fields from the uploaded file."
+      : processingLabel === "Analyzing..."
+        ? "Text extraction is complete. AI validation and risk analysis are running now."
+        : null
+  const amountLabel =
+    isProcessing && invoice.amount === 0
+      ? "Awaiting OCR"
+      : `${invoice.currency} ${invoice.amount.toLocaleString("en-US")}`
+
   return (
     <article className="rounded-[12px] border border-[#243047] bg-[#172033] p-4 transition hover:border-[#3B82F6]/70 hover:bg-[#1B263C]">
+      <InvoiceProcessingTrigger
+        invoiceId={invoice.id}
+        shouldProcess={shouldProcessInvoice}
+        processingStatus={invoice.processingStatus}
+        onStarted={() => {
+          setLocalProcessingLabel(
+            invoice.extractedText ? "Analyzing..." : "Extracting..."
+          )
+        }}
+        onCompleted={(ok) => {
+          if (!ok) {
+            setLocalProcessingLabel(null)
+          }
+        }}
+      />
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[15px] font-semibold text-[#E5E7EB]">
@@ -197,20 +253,38 @@ function InvoiceWorkCard({
           </p>
         </div>
         <p className="text-right text-[15px] font-semibold text-[#E5E7EB]">
-          {invoice.currency} {invoice.amount.toLocaleString("en-US")}
+          {amountLabel}
         </p>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <StatusBadge
-          label={invoice.riskLevel}
-          tone={riskTone[invoice.riskLevel]}
-        />
-        <StatusBadge
-          label={invoice.validationStatus}
-          tone={validationTone[invoice.validationStatus]}
-        />
+        {processingLabel ? (
+          <StatusBadge label={processingLabel} tone="ai" />
+        ) : null}
+        {!isProcessing ? (
+          <>
+            <StatusBadge
+              label={invoice.riskLevel}
+              tone={riskTone[invoice.riskLevel]}
+            />
+            <StatusBadge
+              label={invoice.validationStatus}
+              tone={validationTone[invoice.validationStatus]}
+            />
+          </>
+        ) : null}
       </div>
+
+      {isProcessing ? (
+        <div className="mt-4 rounded-[10px] border border-[#1D4ED8]/40 bg-[#0F1D3A] p-3">
+          <p className="text-[13px] font-medium text-[#BFDBFE]">
+            Invoice processing in progress
+          </p>
+          <p className="mt-2 text-[13px] leading-5 text-[#DBEAFE]">
+            {processingDescription}
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-4 grid grid-cols-2 gap-3 rounded-[10px] bg-[#0B1020] p-3">
         <div>
@@ -239,18 +313,20 @@ function InvoiceWorkCard({
         ))}
       </div>
 
-      <Button
-        asChild
-        className="mt-4 h-9 w-full rounded-[10px] bg-[#111827] text-[#E5E7EB] hover:bg-[#243047]"
-      >
-        <Link
-          href={`/invoice-management/${invoice.id}`}
-          className="flex items-center justify-center gap-2"
+      {!isProcessing ? (
+        <Button
+          asChild
+          className="mt-4 h-9 w-full rounded-[10px] bg-[#111827] text-[#E5E7EB] hover:bg-[#243047]"
         >
-          Review Invoice
-          <ArrowRight className="h-4 w-4" />
-        </Link>
-      </Button>
+          <Link
+            href={`/invoice-management/${invoice.id}`}
+            className="flex items-center justify-center gap-2"
+          >
+            Open Invoice
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </Button>
+      ) : null}
     </article>
   )
 }
