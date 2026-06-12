@@ -23,6 +23,11 @@ import {
   getSupabaseAdminClient,
   getSupabaseServerClient,
 } from "@/lib/supabase/server"
+import {
+  DEFAULT_SUPPLIER_LANGUAGE,
+  isSupplierPreferredLanguage,
+  type SupplierPreferredLanguage,
+} from "@/lib/supplier-language"
 
 type ActionResult = {
   ok: boolean
@@ -80,6 +85,7 @@ type SupplierPayload = {
   leadTimeDays: number
   reliabilityScore: number
   status: "preferred" | "watchlist" | "inactive"
+  preferredLanguage?: SupplierPreferredLanguage
 }
 
 type ThresholdDecisionPayload = {
@@ -210,6 +216,21 @@ function stockStatus(stock: number, threshold: number) {
 
 function cleanText(value: string) {
   return value.trim()
+}
+
+function resolveSupplierPreferredLanguage(
+  value?: string | null
+): SupplierPreferredLanguage {
+  if (!value) {
+    return DEFAULT_SUPPLIER_LANGUAGE
+  }
+
+  const normalized = value.trim().toLowerCase()
+  if (!isSupplierPreferredLanguage(normalized)) {
+    throw new Error("Preferred language must be one of: en, ms, zh.")
+  }
+
+  return normalized
 }
 
 function sleep(ms: number) {
@@ -1604,6 +1625,9 @@ export async function createSupplierAction(
 ): Promise<ActionResult> {
   try {
     const supabase = requireSupabase()
+    const preferredLanguage = resolveSupplierPreferredLanguage(
+      payload.preferredLanguage
+    )
 
     if (!cleanText(payload.name) || !cleanText(payload.region)) {
       throw new Error("Supplier name and region are required.")
@@ -1612,18 +1636,33 @@ export async function createSupplierAction(
       throw new Error("Reliability must be between 0 and 100.")
     }
 
-    await throwIfSupabaseError(
-      await supabase.from("suppliers").insert({
-        id: id("sup"),
-        name: cleanText(payload.name),
-        region: cleanText(payload.region),
-        lead_time_days: payload.leadTimeDays,
-        reliability_score: payload.reliabilityScore,
-        status: payload.status,
-        moq: null,
-        notes: "Added from supplier registry.",
-      })
-    )
+    const insertPayload = {
+      id: id("sup"),
+      name: cleanText(payload.name),
+      region: cleanText(payload.region),
+      lead_time_days: payload.leadTimeDays,
+      reliability_score: payload.reliabilityScore,
+      status: payload.status,
+      preferred_language: preferredLanguage,
+      moq: null,
+      notes: "Added from supplier registry.",
+    }
+
+    try {
+      await throwIfSupabaseError(
+        await supabase.from("suppliers").insert(insertPayload)
+      )
+    } catch (error) {
+      if (!isMissingSupabaseColumnError(error, "suppliers", "preferred_language")) {
+        throw error
+      }
+
+      const legacyPayload = { ...insertPayload }
+      delete (legacyPayload as { preferred_language?: string }).preferred_language
+      await throwIfSupabaseError(
+        await supabase.from("suppliers").insert(legacyPayload)
+      )
+    }
 
     revalidatePath("/suppliers")
     revalidatePath("/inventory")
@@ -1639,6 +1678,9 @@ export async function updateSupplierAction(
 ): Promise<ActionResult> {
   try {
     const supabase = requireSupabase()
+    const preferredLanguage = resolveSupplierPreferredLanguage(
+      payload.preferredLanguage
+    )
 
     if (!payload.supplierId) {
       throw new Error("Missing supplier identifier.")
@@ -1650,18 +1692,36 @@ export async function updateSupplierAction(
       throw new Error("Reliability must be between 0 and 100.")
     }
 
-    await throwIfSupabaseError(
-      await supabase
-        .from("suppliers")
-        .update({
-          name: cleanText(payload.name),
-          region: cleanText(payload.region),
-          lead_time_days: payload.leadTimeDays,
-          reliability_score: payload.reliabilityScore,
-          status: payload.status,
-        })
-        .eq("id", payload.supplierId)
-    )
+    const updatePayload = {
+      name: cleanText(payload.name),
+      region: cleanText(payload.region),
+      lead_time_days: payload.leadTimeDays,
+      reliability_score: payload.reliabilityScore,
+      status: payload.status,
+      preferred_language: preferredLanguage,
+    }
+
+    try {
+      await throwIfSupabaseError(
+        await supabase
+          .from("suppliers")
+          .update(updatePayload)
+          .eq("id", payload.supplierId)
+      )
+    } catch (error) {
+      if (!isMissingSupabaseColumnError(error, "suppliers", "preferred_language")) {
+        throw error
+      }
+
+      const legacyPayload = { ...updatePayload }
+      delete (legacyPayload as { preferred_language?: string }).preferred_language
+      await throwIfSupabaseError(
+        await supabase
+          .from("suppliers")
+          .update(legacyPayload)
+          .eq("id", payload.supplierId)
+      )
+    }
 
     revalidatePath("/suppliers")
     revalidatePath("/inventory")

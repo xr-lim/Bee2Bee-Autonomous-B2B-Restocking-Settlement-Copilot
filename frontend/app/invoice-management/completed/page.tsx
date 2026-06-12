@@ -21,6 +21,7 @@ export default async function CompletedInvoicesPage() {
     (total, invoice) => total + invoice.amount,
     0
   )
+  const closedValueCurrency = resolveClosedValueCurrency(completedInvoices)
 
   return (
     <>
@@ -59,7 +60,10 @@ export default async function CompletedInvoicesPage() {
         <HistoryStat label="Completed" value={completedInvoices.length.toString()} />
         <HistoryStat
           label="Closed Value"
-          value={`USD ${completedTotal.toLocaleString("en-US")}`}
+          value={`${closedValueCurrency} ${completedTotal.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`}
         />
       </section>
 
@@ -82,4 +86,24 @@ function HistoryStat({ label, value }: { label: string; value: string }) {
       </CardContent>
     </Card>
   )
+}
+
+function resolveClosedValueCurrency(invoices: Awaited<ReturnType<typeof getInvoices>>) {
+  if (invoices.length === 0) {
+    return "MYR"
+  }
+
+  const currencies = Array.from(
+    new Set(
+      invoices
+        .map((invoice) => invoice.currency?.trim().toUpperCase())
+        .filter((currency): currency is string => Boolean(currency))
+    )
+  )
+
+  if (currencies.length === 1) {
+    return currencies[0]
+  }
+
+  return "MYR"
 }

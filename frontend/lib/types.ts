@@ -1,5 +1,10 @@
 import type { LucideIcon } from "lucide-react"
 
+import type {
+  SupplierMessageLanguage,
+  SupplierPreferredLanguage,
+} from "@/lib/supplier-language"
+
 export type StatusTone = "default" | "success" | "warning" | "danger" | "ai"
 
 export type NavigationItem = {
@@ -115,6 +120,7 @@ export type Supplier = {
   reliabilityScore: number
   leadTimeDays: number
   status: "preferred" | "watchlist" | "inactive"
+  preferredLanguage: SupplierPreferredLanguage
 }
 
 export type OrderSummaryItem = {
@@ -154,7 +160,7 @@ export type NegotiationMessage = {
   attachmentLabel?: string
   orderSummary?: OrderSummary
   invoiceId?: string
-  language?: "EN" | "ZH" | "JA"
+  language?: SupplierMessageLanguage
   translation?: string
 }
 

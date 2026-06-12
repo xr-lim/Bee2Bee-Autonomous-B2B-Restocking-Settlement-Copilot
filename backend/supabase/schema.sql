@@ -39,6 +39,9 @@ create table public.suppliers (
   id text primary key,
   name text not null,
   region text not null,
+  preferred_language varchar(10) not null default 'en' check (
+    preferred_language in ('en', 'ms', 'zh')
+  ),
   lead_time_days integer not null check (lead_time_days >= 0),
   reliability_score numeric(5, 2) not null check (
     reliability_score >= 0 and reliability_score <= 100

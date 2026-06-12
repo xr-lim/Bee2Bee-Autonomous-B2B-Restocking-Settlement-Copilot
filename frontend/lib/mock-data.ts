@@ -18,6 +18,7 @@ export const mockSuppliers: Supplier[] = [
     reliabilityScore: 94,
     leadTimeDays: 5,
     status: "preferred",
+    preferredLanguage: "en",
   },
   {
     id: "sup-002",
@@ -26,6 +27,7 @@ export const mockSuppliers: Supplier[] = [
     reliabilityScore: 79,
     leadTimeDays: 8,
     status: "watchlist",
+    preferredLanguage: "en",
   },
   {
     id: "sup-003",
@@ -34,6 +36,7 @@ export const mockSuppliers: Supplier[] = [
     reliabilityScore: 89,
     leadTimeDays: 4,
     status: "preferred",
+    preferredLanguage: "zh",
   },
   {
     id: "sup-004",
@@ -42,6 +45,7 @@ export const mockSuppliers: Supplier[] = [
     reliabilityScore: 86,
     leadTimeDays: 6,
     status: "preferred",
+    preferredLanguage: "ms",
   },
 ]
 

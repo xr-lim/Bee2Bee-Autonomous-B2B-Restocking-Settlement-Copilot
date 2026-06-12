@@ -29,6 +29,12 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import type { Product, StatusTone, Supplier } from "@/lib/types"
+import {
+  DEFAULT_SUPPLIER_LANGUAGE,
+  getLanguageLabel,
+  SUPPLIER_LANGUAGE_OPTIONS,
+  type SupplierPreferredLanguage,
+} from "@/lib/supplier-language"
 import { cn } from "@/lib/utils"
 import {
   createSupplierAction,
@@ -50,6 +56,7 @@ type SupplierPayload = {
   leadTimeDays: number
   reliabilityScore: number
   status: Supplier["status"]
+  preferredLanguage: SupplierPreferredLanguage
 }
 
 const statusTone: Record<Supplier["status"], StatusTone> = {
@@ -112,6 +119,7 @@ export function SuppliersManager({
           supplier.name.toLowerCase().includes(keyword) ||
           supplier.region.toLowerCase().includes(keyword) ||
           supplier.id.toLowerCase().includes(keyword) ||
+          getLanguageLabel(supplier.preferredLanguage).toLowerCase().includes(keyword) ||
           statusLabel[supplier.status].toLowerCase().includes(keyword))
     )
   }, [query, statusFilter, suppliers])
@@ -273,9 +281,10 @@ export function SuppliersManager({
             {error}
           </div>
         ) : null}
-        <div className="grid grid-cols-[1.6fr_1fr_0.8fr_0.8fr_0.8fr_auto] items-center gap-3 border-b border-[#243047] px-5 py-2.5 text-[12px] font-medium uppercase tracking-wider text-[#6B7280]">
+        <div className="grid grid-cols-[1.6fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_auto] items-center gap-3 border-b border-[#243047] px-5 py-2.5 text-[12px] font-medium uppercase tracking-wider text-[#6B7280]">
           <span>Supplier</span>
           <span>Region</span>
+          <span>Language</span>
           <span>Lead time</span>
           <span>Reliability</span>
           <span>Status</span>
@@ -298,7 +307,7 @@ export function SuppliersManager({
                   }
                   aria-expanded={isOpen}
                   className={cn(
-                    "grid w-full grid-cols-[1.6fr_1fr_0.8fr_0.8fr_0.8fr_auto] items-center gap-3 px-5 py-4 text-left transition-colors",
+                    "grid w-full grid-cols-[1.6fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_auto] items-center gap-3 px-5 py-4 text-left transition-colors",
                     isOpen
                       ? "bg-[#172033]"
                       : "hover:bg-[#172033]/60"
@@ -318,6 +327,9 @@ export function SuppliersManager({
                     </div>
                   </div>
                   <p className="text-[14px] text-[#E5E7EB]">{supplier.region}</p>
+                  <p className="text-[14px] text-[#E5E7EB]">
+                    {getLanguageLabel(supplier.preferredLanguage)}
+                  </p>
                   <p className="text-[14px] text-[#E5E7EB]">
                     {supplier.leadTimeDays}d
                   </p>
@@ -389,6 +401,7 @@ export function SuppliersManager({
                                   leadTimeDays: supplier.leadTimeDays,
                                   reliabilityScore: supplier.reliabilityScore,
                                   status: supplier.status,
+                                  preferredLanguage: supplier.preferredLanguage,
                                 }}
                                 onSubmit={handleUpdateSupplier}
                                 onDelete={handleDeleteSupplier}
@@ -487,6 +500,10 @@ function SupplierDialog({
   const [status, setStatus] = useState<Supplier["status"]>(
     initialValues?.status ?? "watchlist"
   )
+  const [preferredLanguage, setPreferredLanguage] =
+    useState<SupplierPreferredLanguage>(
+      initialValues?.preferredLanguage ?? DEFAULT_SUPPLIER_LANGUAGE
+    )
   const [error, setError] = useState<string | null>(null)
 
   function handleDelete() {
@@ -516,6 +533,7 @@ function SupplierDialog({
       leadTimeDays: leadNumber,
       reliabilityScore: reliabilityNumber,
       status,
+      preferredLanguage,
     })
   }
 
@@ -547,6 +565,21 @@ function SupplierDialog({
               placeholder="KL, Malaysia"
               className="h-10 rounded-[10px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB] placeholder:text-[#6B7280]"
             />
+          </Field>
+          <Field label="Preferred Language" className="col-span-2">
+            <select
+              value={preferredLanguage}
+              onChange={(event) =>
+                setPreferredLanguage(event.target.value as SupplierPreferredLanguage)
+              }
+              className="h-10 w-full rounded-[10px] border border-[#243047] bg-[#0B1220] px-3 text-[14px] text-[#E5E7EB] outline-none"
+            >
+              {SUPPLIER_LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Status">
             <select

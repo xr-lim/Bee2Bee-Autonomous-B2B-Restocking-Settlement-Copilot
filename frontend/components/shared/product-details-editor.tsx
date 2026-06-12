@@ -20,6 +20,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { getLanguageLabel } from "@/lib/supplier-language"
 import type { Product, StatusTone, Supplier } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { updateProductAction } from "@/lib/actions"
@@ -319,8 +320,10 @@ export function ProductDetailsEditor({
                 </p>
                 {primarySupplier ? (
                   <p className="mt-0.5 text-[12px] text-[#6B7280]">
-                    {primarySupplier.region} · {primarySupplier.leadTimeDays}d
-                    lead · {primarySupplier.reliabilityScore}% reliability
+                    {primarySupplier.region} ·{" "}
+                    {getLanguageLabel(primarySupplier.preferredLanguage)} ·{" "}
+                    {primarySupplier.leadTimeDays}d lead ·{" "}
+                    {primarySupplier.reliabilityScore}% reliability
                   </p>
                 ) : null}
               </div>
@@ -418,8 +421,10 @@ export function ProductDetailsEditor({
                                 ) : null}
                               </div>
                               <p className="mt-0.5 text-[12px] text-[#6B7280]">
-                                {supplier.region} · {supplier.leadTimeDays}d
-                                lead · {supplier.reliabilityScore}% reliability
+                                {supplier.region} ·{" "}
+                                {getLanguageLabel(supplier.preferredLanguage)} ·{" "}
+                                {supplier.leadTimeDays}d lead ·{" "}
+                                {supplier.reliabilityScore}% reliability
                                 {option
                                   ? ` · Last deal $${option.lastDealPrice.toFixed(2)}`
                                   : ""}

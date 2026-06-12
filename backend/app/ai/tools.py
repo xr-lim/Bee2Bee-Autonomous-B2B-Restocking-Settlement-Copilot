@@ -12,10 +12,15 @@ from typing import Any, Literal
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import MetaData, Table, create_engine, desc, func, insert, select, update, text
+from sqlalchemy import MetaData, Table, create_engine, desc, func, insert, literal, select, update, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.ai.supplier_language import (
+    DEFAULT_SUPPLIER_LANGUAGE,
+    normalize_supplier_language,
+    supplier_language_label,
+)
 
 JsonValue = dict[str, Any] | list[Any] | str | int | float | bool | None
 
@@ -106,6 +111,13 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
 
 def _normalize_text(value: str) -> str:
     return value.strip().lower()
+
+
+def _preferred_language_expression(suppliers: Table):
+    preferred_language_column = suppliers.c.get("preferred_language")
+    if preferred_language_column is None:
+        return literal(DEFAULT_SUPPLIER_LANGUAGE)
+    return preferred_language_column
 
 
 def _resolve_product(session: Session, sku: str) -> dict[str, Any]:
@@ -839,6 +851,12 @@ def _get_supplier_info_impl(
                 "id": supplier["id"],
                 "name": supplier["name"],
                 "region": supplier["region"],
+                "preferred_language": normalize_supplier_language(
+                    supplier.get("preferred_language")
+                ),
+                "preferred_language_label": supplier_language_label(
+                    supplier.get("preferred_language")
+                ),
                 "lead_time_days": int(supplier["lead_time_days"]),
                 "reliability_score": float(supplier["reliability_score"]),
                 "moq": supplier["moq"],
@@ -1008,6 +1026,12 @@ def _get_last_supplier_conversation_messages_impl(
             "supplier": {
                 "id": supplier_row["id"],
                 "name": supplier_row["name"],
+                "preferred_language": normalize_supplier_language(
+                    supplier_row.get("preferred_language")
+                ),
+                "preferred_language_label": supplier_language_label(
+                    supplier_row.get("preferred_language")
+                ),
             }
             if supplier_row
             else None,
@@ -1686,12 +1710,14 @@ def _resolve_restock_request_for_conversation(session: Session, conversation_id:
     products = table("products")
     conversation_products = table("conversation_products")
     workflows = table("workflows")
+    suppliers = table("suppliers")
 
     # First try to find via conversation_products -> products -> restock_requests
     row = session.execute(
         select(
             restock_requests.c.id.label("restock_request_id"),   # Added
             products.c.primary_supplier_id.label("supplier_id"), # Added
+            _preferred_language_expression(suppliers).label("supplier_preferred_language"),
             restock_requests.c.requested_quantity,
             restock_requests.c.target_price_min.label("request_target_price_min"),
             restock_requests.c.target_price_max.label("request_target_price_max"),
@@ -1705,6 +1731,7 @@ def _resolve_restock_request_for_conversation(session: Session, conversation_id:
             .join(products, conversation_products.c.product_id == products.c.id)
             .join(restock_requests, restock_requests.c.product_id == products.c.id)
             .outerjoin(workflows, restock_requests.c.workflow_id == workflows.c.id)
+            .outerjoin(suppliers, products.c.primary_supplier_id == suppliers.c.id)
         )
         .where(conversation_products.c.conversation_id == conversation_id)
         .order_by(desc(restock_requests.c.updated_at), desc(restock_requests.c.created_at))
@@ -1725,6 +1752,7 @@ def _resolve_restock_request_for_conversation(session: Session, conversation_id:
             select(
                 restock_requests.c.id.label("restock_request_id"),   # Added
                 products.c.primary_supplier_id.label("supplier_id"), # Added
+                _preferred_language_expression(suppliers).label("supplier_preferred_language"),
                 restock_requests.c.requested_quantity,
                 restock_requests.c.target_price_min.label("request_target_price_min"),
                 restock_requests.c.target_price_max.label("request_target_price_max"),
@@ -1737,6 +1765,7 @@ def _resolve_restock_request_for_conversation(session: Session, conversation_id:
                 restock_requests
                 .join(products, restock_requests.c.product_id == products.c.id)
                 .outerjoin(workflows, restock_requests.c.workflow_id == workflows.c.id)
+                .outerjoin(suppliers, products.c.primary_supplier_id == suppliers.c.id)
             )
             .where(products.c.primary_supplier_id == conversation["supplier_id"])
             .order_by(desc(restock_requests.c.updated_at), desc(restock_requests.c.created_at))
@@ -1751,6 +1780,7 @@ def _resolve_restock_request_for_conversation(session: Session, conversation_id:
         select(
             restock_requests.c.id.label("restock_request_id"),   # Added
             products.c.primary_supplier_id.label("supplier_id"), # Added
+            _preferred_language_expression(suppliers).label("supplier_preferred_language"),
             restock_requests.c.requested_quantity,
             restock_requests.c.target_price_min.label("request_target_price_min"),
             restock_requests.c.target_price_max.label("request_target_price_max"),
@@ -1763,6 +1793,7 @@ def _resolve_restock_request_for_conversation(session: Session, conversation_id:
             restock_requests
             .join(products, restock_requests.c.product_id == products.c.id)
             .outerjoin(workflows, restock_requests.c.workflow_id == workflows.c.id)
+            .outerjoin(suppliers, products.c.primary_supplier_id == suppliers.c.id)
         )
         .order_by(desc(restock_requests.c.updated_at), desc(restock_requests.c.created_at))
         .limit(1)
@@ -1781,6 +1812,7 @@ def _get_restock_context_impl(
     restock_requests = table("restock_requests")
     products = table("products")
     workflows = table("workflows")
+    suppliers = table("suppliers")
 
     with session_scope() as session:
         row = None
@@ -1790,6 +1822,7 @@ def _get_restock_context_impl(
                 select(
                     restock_requests.c.id.label("restock_request_id"),   # Added this
                     products.c.primary_supplier_id.label("supplier_id"), # Added this
+                    _preferred_language_expression(suppliers).label("supplier_preferred_language"),
                     restock_requests.c.requested_quantity,
                     restock_requests.c.target_price_min.label("request_target_price_min"),
                     restock_requests.c.target_price_max.label("request_target_price_max"),
@@ -1802,6 +1835,7 @@ def _get_restock_context_impl(
                     restock_requests
                     .join(products, restock_requests.c.product_id == products.c.id)
                     .outerjoin(workflows, restock_requests.c.workflow_id == workflows.c.id)
+                    .outerjoin(suppliers, products.c.primary_supplier_id == suppliers.c.id)
                 )
                 .where(restock_requests.c.id == request_id)
             ).mappings().first()
@@ -1855,6 +1889,12 @@ def _get_restock_context_impl(
         return {
             "restock_request_id": row["restock_request_id"],
             "supplier_id": row["supplier_id"],
+            "supplier_preferred_language": normalize_supplier_language(
+                row.get("supplier_preferred_language")
+            ),
+            "supplier_preferred_language_label": supplier_language_label(
+                row.get("supplier_preferred_language")
+            ),
             "requested_quantity": row["requested_quantity"],
             "target_price_min": float(target_price_min) if target_price_min is not None else None,
             "target_price_max": float(target_price_max) if target_price_max is not None else None,
@@ -2104,6 +2144,11 @@ Output format (strict):
 4) When you use tools, never include tool-call JSON/payloads in the message text. Tool execution is handled separately.
 
 When starting a negotiation, use get_restock_context to find the target_price_min, target_price_max, and requested_quantity.
+The get_restock_context tool also returns supplier_preferred_language and supplier_preferred_language_label.
+Generate every supplier-facing message in that preferred language:
+- en = English
+- ms = Malay
+- zh = Chinese
 
 Check the conversation_state and order_id in the context:
 - If conversation_state is 'accepted' and order_id exists, the deal is done - just file any invoice attachments.

@@ -10,6 +10,7 @@ from app.ai.tools import (
     get_last_supplier_conversation_messages,
     get_product_operational_context,
     get_receipt_info,
+    get_supplier_info,
 )
 
 
@@ -24,6 +25,11 @@ Prioritize operationally useful answers about:
 - concrete next actions for the merchant team.
 
 Keep answers concise, practical, and decision-oriented.
+If the user asks for a supplier-facing message and the context includes a supplier preferred language,
+write that message in the supplier's preferred language:
+- en = English
+- ms = Malay
+- zh = Chinese
 """.strip()
 
 
@@ -57,6 +63,12 @@ def build_context(
             invoice_payload["invoice_number"] = invoice_number
         context["receipt_info"] = _json_ready(get_receipt_info.invoke(invoice_payload))
         sources.append("get_receipt_info")
+
+    if supplier_id:
+        context["supplier_profile"] = _json_ready(
+            get_supplier_info.invoke({"supplier_id": supplier_id})
+        )
+        sources.append("get_supplier_info")
 
     if supplier_id or conversation_id:
         conversation_payload: dict[str, Any] = {"limit": conversation_limit}

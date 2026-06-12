@@ -12,6 +12,11 @@ import type {
   ThresholdChangeRequest,
   WorkflowState,
 } from "@/lib/types"
+import {
+  getLanguageLabel,
+  getMessageLanguageCode,
+  normalizeSupplierPreferredLanguage,
+} from "@/lib/supplier-language"
 
 type DashboardKpi = {
   title: string
@@ -126,6 +131,7 @@ type RawSupplier = {
   leadTimeDays: number
   reliabilityScore: number
   status?: Supplier["status"]
+  preferredLanguage?: string | null
   moq?: number | null
   notes?: string | null
   createdAt?: string
@@ -828,6 +834,9 @@ function mapSuppliers(suppliers: RawSupplier[]): Supplier[] {
     leadTimeDays: supplier.leadTimeDays,
     status:
       supplier.status ?? reliabilityStatus(Number(supplier.reliabilityScore)),
+    preferredLanguage: normalizeSupplierPreferredLanguage(
+      supplier.preferredLanguage
+    ),
   }))
 }
 
@@ -1051,6 +1060,7 @@ function mapConversations(
   rows: Awaited<ReturnType<typeof getDomainRows>>
 ): Conversation[] {
   const productById = new Map(rows.products.map((product) => [product.id, product]))
+  const supplierById = new Map(rows.suppliers.map((supplier) => [supplier.id, supplier]))
   const workflowByConversationId = new Map<string, RawWorkflow>()
   rows.workflows
     .filter((workflow) => Boolean(workflow.conversationId))
@@ -1113,6 +1123,9 @@ function mapConversations(
   })
 
   return rows.conversations.map((conversation) => {
+    const supplier = conversation.supplierId
+      ? supplierById.get(conversation.supplierId)
+      : undefined
     const linkedSkus = rows.conversationProducts
       .filter((link) => link.conversationId === conversation.id)
       .map((link) => productById.get(link.productId)?.sku)
@@ -1172,7 +1185,7 @@ function mapConversations(
             ? "N/A"
             : latestMessage.extractedQuantity.toLocaleString("en-US"),
         deliveryEstimate: "Pending supplier confirmation",
-        supplierLanguage: "English",
+        supplierLanguage: getLanguageLabel(supplier?.preferredLanguage),
         detectedIntent: latestMessage?.detectedIntent ?? "needs_analysis",
         missingFields,
         confidenceScore: missingFields.length > 0 ? 88 : 94,
@@ -1235,15 +1248,19 @@ function mapMessages(
   const conversationsById = new Map(
     mappedConversations.map((conversation) => [conversation.id, conversation])
   )
+  const supplierById = new Map(rows.suppliers.map((supplier) => [supplier.id, supplier]))
 
   return rows.conversationMessages.map((message) => {
     const type = messageType(message)
     const attachment = attachmentType(message.messageType)
+    const supplierId =
+      conversationsById.get(message.conversationId)?.supplierId ?? ""
+    const supplier = supplierId ? supplierById.get(supplierId) : undefined
 
     return {
       id: message.id,
       conversationId: message.conversationId,
-      supplierId: conversationsById.get(message.conversationId)?.supplierId ?? "",
+      supplierId,
       type,
       author: message.senderType,
       body: message.content,
@@ -1259,7 +1276,10 @@ function mapMessages(
         ? fileNameFromUrl(message.attachmentUrl) || `${attachment} attachment`
         : undefined,
       invoiceId: conversationsById.get(message.conversationId)?.linkedInvoiceId ?? undefined,
-      language: "EN",
+      language:
+        message.senderType === "supplier" || message.senderType === "ai"
+          ? getMessageLanguageCode(supplier?.preferredLanguage)
+          : "EN",
     }
   })
 }

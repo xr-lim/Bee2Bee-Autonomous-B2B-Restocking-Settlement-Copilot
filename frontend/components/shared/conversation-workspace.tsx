@@ -37,6 +37,11 @@ import {
   getEvidenceSourceMessageId,
   type ExtractionField,
 } from "@/lib/ai-reasoning"
+import {
+  getLanguageLabel,
+  getMessageLanguageCode,
+  normalizeSupplierPreferredLanguage,
+} from "@/lib/supplier-language"
 import type {
   Conversation,
   Invoice,
@@ -95,6 +100,7 @@ const languageLabel: Record<
   { short: string; full: string }
 > = {
   EN: { short: "EN", full: "English" },
+  MS: { short: "MS", full: "Malay" },
   ZH: { short: "中文", full: "Chinese" },
   JA: { short: "日本語", full: "Japanese" },
 }
@@ -191,6 +197,15 @@ export function ConversationWorkspace({
         conversation.negotiationState === "Needs Analysis"),
     [conversation.negotiationState, isConversationComplete]
   )
+  const supplierPreferredLanguage = normalizeSupplierPreferredLanguage(
+    supplier?.preferredLanguage
+  )
+  const supplierPreferredLanguageLabel = getLanguageLabel(
+    supplier?.preferredLanguage
+  )
+  const supplierMessageLanguage = getMessageLanguageCode(
+    supplier?.preferredLanguage
+  )
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -258,7 +273,8 @@ export function ConversationWorkspace({
           author: isAiSender ? "ai" : isSupplierSender ? "supplier" : "merchant",
           sentiment: "neutral",
           body: content,
-          language: "EN",
+          language:
+            isAiSender || isSupplierSender ? supplierMessageLanguage : "EN",
           createdAt: new Date().toISOString(),
           attachmentType,
           attachmentLabel:
@@ -269,7 +285,12 @@ export function ConversationWorkspace({
     })
 
     return () => { newSocket.disconnect() }
-  }, [conversation.id, conversation.supplierId, supplier?.name])
+  }, [
+    conversation.id,
+    conversation.supplierId,
+    supplier?.name,
+    supplierMessageLanguage,
+  ])
 
   const handleStartNegotiation = useCallback(async () => {
     if (isConversationComplete) return
@@ -336,7 +357,7 @@ export function ConversationWorkspace({
         author: "supplier",
         sentiment: "neutral",
         body: optimisticContent,
-        language: "EN",
+        language: supplierMessageLanguage,
         createdAt: new Date().toISOString(),
       },
     ])
@@ -501,6 +522,10 @@ export function ConversationWorkspace({
                 value={supplier?.name ?? "Unknown supplier"}
               />
               <InfoRow
+                label="Preferred Language"
+                value={supplierPreferredLanguageLabel}
+              />
+              <InfoRow
                 label="Source Type"
                 value={displayConversationSource(conversation.source)}
               />
@@ -626,7 +651,7 @@ export function ConversationWorkspace({
             </CardHeader>
 
             <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-              {conversation.aiExtraction.supplierLanguage !== "English" ? (
+              {supplierPreferredLanguage !== "en" ? (
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#243047] bg-[#8B5CF6]/5 px-5 py-2.5">
                   <div className="flex items-center gap-2">
                     <Languages
@@ -636,7 +661,7 @@ export function ConversationWorkspace({
                     <span className="text-[13px] text-[#E5E7EB]">
                       Supplier communicates in{" "}
                       <span className="font-semibold text-[#C4B5FD]">
-                        {conversation.aiExtraction.supplierLanguage}
+                        {supplierPreferredLanguageLabel}
                       </span>
                       . Z.AI is auto-translating and replying in the same
                       language.
@@ -879,7 +904,9 @@ function MessageBubble({
           <p
             className="text-[15px] leading-6 text-[#E5E7EB]"
             lang={
-              message.language === "ZH"
+              message.language === "MS"
+                ? "ms"
+                : message.language === "ZH"
                 ? "zh"
                 : message.language === "JA"
                   ? "ja"
