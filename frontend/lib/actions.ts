@@ -20,6 +20,13 @@ import {
   extractInvoiceDocumentText,
 } from "@/lib/invoice-extraction"
 import {
+  buildInvoiceValidationSummary,
+  isResolvedInvoiceCheck,
+  riskLevelFromIssues,
+  type InvoiceCheckResolutionContext,
+  type InvoiceValidationCheck,
+} from "@/lib/invoice-validation"
+import {
   getSupabaseAdminClient,
   getSupabaseServerClient,
 } from "@/lib/supabase/server"
@@ -663,6 +670,71 @@ function expectedActualValuesForIssue(
   return {
     expectedValue: null,
     actualValue: issue.description,
+  }
+}
+
+function buildInvoiceCheckResolutionContext(
+  invoiceData: InvoiceAnalysisInvoiceData,
+  expectedData: InvoiceAnalysisExpectedData
+): InvoiceCheckResolutionContext {
+  const invoiceQuantity =
+    typeof invoiceData.quantity === "number"
+      ? invoiceData.quantity
+      : invoiceData.lineItems.reduce((total, line) => total + line.quantity, 0)
+  const negotiatedAmount =
+    expectedData.expectedAmountMax ??
+    expectedData.expectedAmountMin ??
+    expectedData.expectedAmount ??
+    invoiceData.amount
+
+  return {
+    amount: invoiceData.amount,
+    negotiatedAmount,
+    expectedAmountMin: expectedData.expectedAmountMin ?? null,
+    expectedAmountMax: expectedData.expectedAmountMax ?? null,
+    expectedQuantity: expectedData.expectedQuantity ?? 0,
+    invoiceQuantity,
+    currentCurrency: invoiceData.currency,
+    expectedCurrency: expectedData.expectedCurrency ?? invoiceData.currency,
+    currentSupplierName:
+      invoiceData.supplierName?.trim() || invoiceData.supplierId?.trim() || "",
+    expectedSupplierName:
+      expectedData.expectedSupplierName?.trim() ||
+      expectedData.expectedSupplierId?.trim() ||
+      "",
+    bankDetails: invoiceData.bankDetails?.trim() || "Not provided",
+    paymentTerms: invoiceData.paymentTerms?.trim() || "Not provided",
+    invoiceNumber: invoiceData.invoiceNumber,
+    lineItemCount: invoiceData.lineItems.length,
+  }
+}
+
+function buildEffectiveValidationItems(
+  issues: InvoiceAnalysisIssue[],
+  invoiceData: InvoiceAnalysisInvoiceData,
+  expectedData: InvoiceAnalysisExpectedData
+) {
+  const resolutionContext = buildInvoiceCheckResolutionContext(invoiceData, expectedData)
+  const candidateItems = issues.map((issue) => {
+    const values = expectedActualValuesForIssue(issue, invoiceData, expectedData)
+    const row: InvoiceValidationCheck = {
+      checkName: checkNameForIssue(issue),
+      expectedValue: values.expectedValue,
+      actualValue: values.actualValue,
+      result: issue.severity === "low" ? "warning" : "failed",
+    }
+
+    return {
+      issue,
+      row,
+      resolved: isResolvedInvoiceCheck(row, resolutionContext),
+    }
+  })
+
+  return {
+    resolutionContext,
+    candidateItems,
+    effectiveItems: candidateItems.filter((item) => !item.resolved),
   }
 }
 
@@ -3107,7 +3179,6 @@ export async function analyzeInvoiceAction(
       })
     )
 
-    const validationStatus = validationStatusFromIssues(analysis.issues)
     const confidencePercent = normalizeAiConfidencePercent(analysis.confidence)
     console.info(
       "[Invoice AI] Analysis completed",
@@ -3122,6 +3193,54 @@ export async function analyzeInvoiceAction(
       })
     )
 
+    const validationItems = buildEffectiveValidationItems(
+      analysis.issues,
+      validationInvoiceData,
+      context.expectedData
+    )
+    const effectiveIssues = validationItems.effectiveItems.map((item) => item.issue)
+    const effectiveValidationRows = validationItems.effectiveItems.map((item) => ({
+      id: id("ivr"),
+      invoice_id: context.invoice.id,
+      check_name: item.row.checkName,
+      expected_value: item.row.expectedValue,
+      actual_value: item.row.actualValue,
+      result:
+        item.row.result === "warning" || item.row.result === "failed"
+          ? item.row.result
+          : "failed",
+    }))
+    const validationStatus = validationStatusFromIssues(effectiveIssues)
+    const recomputedRiskLevel = riskLevelFromIssues(effectiveIssues)
+    const summaryDetails = buildInvoiceValidationSummary(
+      validationItems.effectiveItems.map((item) => item.row),
+      {
+        fallbackOnly: usedFallback,
+      }
+    )
+    const persistedSummary = summaryDetails.riskReason
+
+    console.info(
+      "[Invoice Validation] recompute",
+      debugSerialize({
+        invoiceId: context.invoice.id,
+        validationChecksUsed: validationItems.candidateItems.map((item) => ({
+          checkName: item.row.checkName,
+          result: item.row.result,
+          expectedValue: item.row.expectedValue ?? null,
+          actualValue: item.row.actualValue ?? null,
+          resolved: item.resolved,
+        })),
+        mismatchListBeforeRecompute: validationItems.candidateItems.map((item) =>
+          item.row.actualValue ?? item.row.checkName
+        ),
+        mismatchListAfterRecompute: summaryDetails.mismatches,
+        finalValidationStatus: validationStatus,
+        finalRiskLevel: recomputedRiskLevel,
+        persistedSummary,
+      })
+    )
+
     await throwIfSupabaseError(
       await supabase
         .from("invoice_validation_results")
@@ -3130,40 +3249,24 @@ export async function analyzeInvoiceAction(
         .like("check_name", "ai_%")
     )
 
-    if (analysis.issues.length > 0) {
-      const validationRows = analysis.issues.map((issue) => {
-        const values = expectedActualValuesForIssue(
-          issue,
-          validationInvoiceData,
-          context.expectedData
-        )
-        return {
-          id: id("ivr"),
-          invoice_id: context.invoice.id,
-          check_name: checkNameForIssue(issue),
-          expected_value: values.expectedValue,
-          actual_value: values.actualValue,
-          result: issue.severity === "low" ? "warning" : "failed",
-        }
-      })
-
+    if (effectiveValidationRows.length > 0) {
       await throwIfSupabaseError(
-        await supabase.from("invoice_validation_results").insert(validationRows)
+        await supabase.from("invoice_validation_results").insert(effectiveValidationRows)
       )
     }
 
     const invoiceUpdatePayload: Record<string, unknown> = {
-      risk_level: analysis.riskLevel,
+      risk_level: recomputedRiskLevel,
       validation_status: validationStatus,
     }
 
     if (usedFallback) {
       invoiceUpdatePayload.risk_confidence = null
-      invoiceUpdatePayload.ai_summary = `Fallback validation only: ${analysis.summary}`
+      invoiceUpdatePayload.ai_summary = persistedSummary
       invoiceUpdatePayload.ai_last_analyzed_at = null
     } else {
       invoiceUpdatePayload.risk_confidence = confidencePercent
-      invoiceUpdatePayload.ai_summary = analysis.summary
+      invoiceUpdatePayload.ai_summary = persistedSummary
       invoiceUpdatePayload.ai_last_analyzed_at = new Date().toISOString()
     }
 
@@ -3178,7 +3281,7 @@ export async function analyzeInvoiceAction(
     const parsedLineItemsNote = repairResult.parsedLineItemsNote
       ? ` Parsed line items: ${repairResult.parsedLineItemsNote}.`
       : ""
-    const actionNote = `${actionNotePrefix} Risk ${analysis.riskLevel}. Confidence ${confidencePercent}%. ${analysis.summary}${parsedLineItemsNote}`
+    const actionNote = `${actionNotePrefix} Risk ${recomputedRiskLevel}. Confidence ${confidencePercent}%. ${persistedSummary}${parsedLineItemsNote}`
 
     await throwIfSupabaseError(
       await supabase.from("invoice_actions").insert({
