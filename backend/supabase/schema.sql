@@ -42,6 +42,7 @@ create table public.suppliers (
   preferred_language varchar(10) not null default 'en' check (
     preferred_language in ('en', 'ms', 'zh')
   ),
+  whatsapp_number text,
   lead_time_days integer not null check (lead_time_days >= 0),
   reliability_score numeric(5, 2) not null check (
     reliability_score >= 0 and reliability_score <= 100
@@ -387,6 +388,8 @@ for each row execute function public.set_updated_at();
 
 create index idx_products_primary_supplier_id
   on public.products (primary_supplier_id);
+create index idx_suppliers_whatsapp_number
+  on public.suppliers (whatsapp_number);
 create index idx_product_stock_demand_trends_product_id
   on public.product_stock_demand_trends (product_id);
 create index idx_product_suppliers_product_id

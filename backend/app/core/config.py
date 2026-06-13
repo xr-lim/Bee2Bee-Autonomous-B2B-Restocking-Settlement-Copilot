@@ -15,6 +15,11 @@ def _env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    fallback = "true" if default else "false"
+    return _env(name, fallback).lower() in {"1", "true", "yes", "on"}
+
+
 DATABASE_URL = _env("DATABASE_URL") or _env("SUPABASE_DB_URL")
 
 AI_PROVIDER = _env("AI_PROVIDER", "anthropic").lower()
@@ -35,3 +40,9 @@ CURRENT_AI_MODEL = GEMINI_MODEL if AI_PROVIDER == "gemini" else ANTHROPIC_MODEL
 AI_MAX_TOKENS = int(_env("AI_MAX_TOKENS", "1200"))
 AI_TEMPERATURE = float(_env("AI_TEMPERATURE", "0.2"))
 AI_TIMEOUT_SECONDS = float(_env("AI_TIMEOUT_SECONDS", "60"))
+
+WHATSAPP_ACCESS_TOKEN = _env("WHATSAPP_ACCESS_TOKEN")
+WHATSAPP_PHONE_NUMBER_ID = _env("WHATSAPP_PHONE_NUMBER_ID")
+WHATSAPP_VERIFY_TOKEN = _env("WHATSAPP_VERIFY_TOKEN")
+WHATSAPP_GRAPH_API_VERSION = _env("WHATSAPP_GRAPH_API_VERSION", "v20.0")
+WHATSAPP_ENABLED = _env_bool("WHATSAPP_ENABLED", False)

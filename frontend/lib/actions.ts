@@ -86,6 +86,7 @@ type SupplierPayload = {
   reliabilityScore: number
   status: "preferred" | "watchlist" | "inactive"
   preferredLanguage?: SupplierPreferredLanguage
+  whatsappNumber?: string
 }
 
 type ThresholdDecisionPayload = {
@@ -228,6 +229,20 @@ function resolveSupplierPreferredLanguage(
   const normalized = value.trim().toLowerCase()
   if (!isSupplierPreferredLanguage(normalized)) {
     throw new Error("Preferred language must be one of: en, ms, zh.")
+  }
+
+  return normalized
+}
+
+function resolveSupplierWhatsAppNumber(value?: string | null) {
+  const cleaned = cleanText(value ?? "")
+  if (!cleaned) {
+    return null
+  }
+
+  const normalized = cleaned.replace(/[^\d+]/g, "")
+  if (!/\d/.test(normalized)) {
+    throw new Error("WhatsApp number must include digits and country code.")
   }
 
   return normalized
@@ -1628,6 +1643,7 @@ export async function createSupplierAction(
     const preferredLanguage = resolveSupplierPreferredLanguage(
       payload.preferredLanguage
     )
+    const whatsappNumber = resolveSupplierWhatsAppNumber(payload.whatsappNumber)
 
     if (!cleanText(payload.name) || !cleanText(payload.region)) {
       throw new Error("Supplier name and region are required.")
@@ -1644,6 +1660,7 @@ export async function createSupplierAction(
       reliability_score: payload.reliabilityScore,
       status: payload.status,
       preferred_language: preferredLanguage,
+      whatsapp_number: whatsappNumber,
       moq: null,
       notes: "Added from supplier registry.",
     }
@@ -1653,12 +1670,16 @@ export async function createSupplierAction(
         await supabase.from("suppliers").insert(insertPayload)
       )
     } catch (error) {
-      if (!isMissingSupabaseColumnError(error, "suppliers", "preferred_language")) {
+      if (
+        !isMissingSupabaseColumnError(error, "suppliers", "preferred_language") &&
+        !isMissingSupabaseColumnError(error, "suppliers", "whatsapp_number")
+      ) {
         throw error
       }
 
       const legacyPayload = { ...insertPayload }
       delete (legacyPayload as { preferred_language?: string }).preferred_language
+      delete (legacyPayload as { whatsapp_number?: string | null }).whatsapp_number
       await throwIfSupabaseError(
         await supabase.from("suppliers").insert(legacyPayload)
       )
@@ -1681,6 +1702,7 @@ export async function updateSupplierAction(
     const preferredLanguage = resolveSupplierPreferredLanguage(
       payload.preferredLanguage
     )
+    const whatsappNumber = resolveSupplierWhatsAppNumber(payload.whatsappNumber)
 
     if (!payload.supplierId) {
       throw new Error("Missing supplier identifier.")
@@ -1699,6 +1721,7 @@ export async function updateSupplierAction(
       reliability_score: payload.reliabilityScore,
       status: payload.status,
       preferred_language: preferredLanguage,
+      whatsapp_number: whatsappNumber,
     }
 
     try {
@@ -1709,12 +1732,16 @@ export async function updateSupplierAction(
           .eq("id", payload.supplierId)
       )
     } catch (error) {
-      if (!isMissingSupabaseColumnError(error, "suppliers", "preferred_language")) {
+      if (
+        !isMissingSupabaseColumnError(error, "suppliers", "preferred_language") &&
+        !isMissingSupabaseColumnError(error, "suppliers", "whatsapp_number")
+      ) {
         throw error
       }
 
       const legacyPayload = { ...updatePayload }
       delete (legacyPayload as { preferred_language?: string }).preferred_language
+      delete (legacyPayload as { whatsapp_number?: string | null }).whatsapp_number
       await throwIfSupabaseError(
         await supabase
           .from("suppliers")

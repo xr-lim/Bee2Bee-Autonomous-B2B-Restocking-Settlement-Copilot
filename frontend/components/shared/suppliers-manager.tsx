@@ -57,6 +57,7 @@ type SupplierPayload = {
   reliabilityScore: number
   status: Supplier["status"]
   preferredLanguage: SupplierPreferredLanguage
+  whatsappNumber?: string
 }
 
 const statusTone: Record<Supplier["status"], StatusTone> = {
@@ -119,6 +120,7 @@ export function SuppliersManager({
           supplier.name.toLowerCase().includes(keyword) ||
           supplier.region.toLowerCase().includes(keyword) ||
           supplier.id.toLowerCase().includes(keyword) ||
+          supplier.whatsappNumber?.toLowerCase().includes(keyword) ||
           getLanguageLabel(supplier.preferredLanguage).toLowerCase().includes(keyword) ||
           statusLabel[supplier.status].toLowerCase().includes(keyword))
     )
@@ -402,6 +404,7 @@ export function SuppliersManager({
                                   reliabilityScore: supplier.reliabilityScore,
                                   status: supplier.status,
                                   preferredLanguage: supplier.preferredLanguage,
+                                  whatsappNumber: supplier.whatsappNumber,
                                 }}
                                 onSubmit={handleUpdateSupplier}
                                 onDelete={handleDeleteSupplier}
@@ -497,6 +500,9 @@ function SupplierDialog({
   const [reliability, setReliability] = useState(
     initialValues?.reliabilityScore?.toString() ?? ""
   )
+  const [whatsappNumber, setWhatsappNumber] = useState(
+    initialValues?.whatsappNumber ?? ""
+  )
   const [status, setStatus] = useState<Supplier["status"]>(
     initialValues?.status ?? "watchlist"
   )
@@ -534,6 +540,7 @@ function SupplierDialog({
       reliabilityScore: reliabilityNumber,
       status,
       preferredLanguage,
+      whatsappNumber: whatsappNumber.trim() || undefined,
     })
   }
 
@@ -563,6 +570,14 @@ function SupplierDialog({
               value={region}
               onChange={(event) => setRegion(event.target.value)}
               placeholder="KL, Malaysia"
+              className="h-10 rounded-[10px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB] placeholder:text-[#6B7280]"
+            />
+          </Field>
+          <Field label="WhatsApp number">
+            <Input
+              value={whatsappNumber}
+              onChange={(event) => setWhatsappNumber(event.target.value)}
+              placeholder="60123456789"
               className="h-10 rounded-[10px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB] placeholder:text-[#6B7280]"
             />
           </Field>

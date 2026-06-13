@@ -132,6 +132,7 @@ type RawSupplier = {
   reliabilityScore: number
   status?: Supplier["status"]
   preferredLanguage?: string | null
+  whatsappNumber?: string | null
   moq?: number | null
   notes?: string | null
   createdAt?: string
@@ -837,6 +838,7 @@ function mapSuppliers(suppliers: RawSupplier[]): Supplier[] {
     preferredLanguage: normalizeSupplierPreferredLanguage(
       supplier.preferredLanguage
     ),
+    whatsappNumber: supplier.whatsappNumber?.trim() || undefined,
   }))
 }
 

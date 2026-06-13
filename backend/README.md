@@ -61,6 +61,19 @@ AI_TEMPERATURE=0.2
 AI_TIMEOUT_SECONDS=60
 ```
 
+For WhatsApp Cloud API setup, also configure:
+
+```env
+WHATSAPP_ENABLED=false
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_VERIFY_TOKEN=
+WHATSAPP_GRAPH_API_VERSION=v20.0
+```
+
+Manual setup steps:
+- [MANUAL_SETUP.md](./MANUAL_SETUP.md)
+
 Useful endpoints:
 
 - `GET /api/v1/ai/status`

@@ -121,6 +121,7 @@ export type Supplier = {
   leadTimeDays: number
   status: "preferred" | "watchlist" | "inactive"
   preferredLanguage: SupplierPreferredLanguage
+  whatsappNumber?: string
 }
 
 export type OrderSummaryItem = {
