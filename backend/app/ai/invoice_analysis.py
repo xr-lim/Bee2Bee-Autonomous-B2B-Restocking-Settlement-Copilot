@@ -93,10 +93,12 @@ class InvoiceAnalysisParsedFields(BaseModel):
         normalized = raw.upper()
 
         direct_map = {
-            "$": "USD",
+            "$": "MYR",
+            "RM": "MYR",
             "RM": "MYR",
             "MYR": "MYR",
-            "USD": "USD",
+            "USD": "MYR",
+            "MYR": "MYR",
             "SGD": "SGD",
             "S$": "SGD",
             "£": "GBP",
@@ -122,8 +124,10 @@ class InvoiceAnalysisParsedFields(BaseModel):
             return code_match.group(1)
 
         text_map = {
-            "US DOLLAR": "USD",
-            "US DOLLARS": "USD",
+            "US DOLLAR": "MYR",
+            "US DOLLARS": "MYR",
+            "MALAYSIAN RINGGIT": "MYR",
+            "RINGGIT": "MYR",
             "MALAYSIAN RINGGIT": "MYR",
             "SINGAPORE DOLLAR": "SGD",
             "SINGAPORE DOLLARS": "SGD",
@@ -286,7 +290,7 @@ def _build_user_prompt(
         '"invoiceNumber": null,\n'
         '"supplierName": null,\n'
         '"amount": 3800,\n'
-        '"currency": "USD",\n'
+        '"currency": "MYR",\n'
         '"quantity": 8,\n'
         '"unitPrice": 500,\n'
         '"subtotal": 4000,\n'

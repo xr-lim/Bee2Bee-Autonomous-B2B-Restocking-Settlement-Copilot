@@ -210,7 +210,7 @@ function normalizeCurrency(value: unknown): InvoiceAnalysisParsedFields["currenc
   if (typeof value !== "string") return null
   const upper = value.trim().toUpperCase()
   if (!upper) return null
-  if (upper === "$") return "USD"
+  if (upper === "$" || upper === "RM") return "MYR"
   if (upper === "RM") return "MYR"
   if (upper === "S$") return "SGD"
   if (upper === "£") return "GBP"
@@ -233,7 +233,8 @@ function inferCurrencyFromText(value?: string | null): InvoiceAnalysisParsedFiel
   if (/\bIDR\b/i.test(normalized)) return "IDR"
   if (/\bMYR\b|\bRM\b/i.test(normalized)) return "MYR"
   if (/\bSGD\b|\bS\$/i.test(normalized)) return "SGD"
-  if (/\bUSD\b|\bUS\$/i.test(normalized) || normalized.includes("$")) return "USD"
+  if (/\bMYR\b|\bRM\b/i.test(normalized) || normalized === "RM") return "MYR"
+  if (/\bUSD\b|\bUS\$/i.test(normalized) || normalized.includes("$")) return "MYR"
   return null
 }
 

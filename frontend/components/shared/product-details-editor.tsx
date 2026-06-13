@@ -256,7 +256,7 @@ export function ProductDetailsEditor({
             )}
           </FieldBlock>
 
-          <FieldBlock label="Unit Price (USD)" editing={isEditing}>
+          <FieldBlock label="Unit Price (RM)" editing={isEditing}>
             {isEditing ? (
               <Input
                 type="number"

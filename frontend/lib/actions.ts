@@ -1002,7 +1002,7 @@ function normalizeStoredInvoiceCurrency(value?: string | null): string | null {
   }
 
   if (normalized === "RM") return "MYR"
-  if (normalized === "$") return "USD"
+  if (normalized === "$" || normalized === "RM") return "MYR"
   if (normalized === "S$") return "SGD"
   if (normalized === "£") return "GBP"
   if (normalized === "€") return "EUR"
@@ -3259,7 +3259,7 @@ export async function createTestInvoiceAction(
             randomNumberBetween(18, 45)
     )
 
-    const currency = pickRandom(["USD", "MYR"] as const)
+    const currency = "MYR" as const
     const quantityVariance = Math.max(12, Math.round(baselineQuantity * 0.05))
     const suspiciousVarianceFloor = Math.max(80, Math.round(baselineQuantity * 0.18))
     const suspiciousVarianceCeiling = Math.max(180, Math.round(baselineQuantity * 0.42))
@@ -3403,7 +3403,7 @@ export async function createUploadedInvoiceAction(
         source_type: sourceType,
         file_url: fileUrl,
         amount: 0,
-        currency: "USD",
+        currency: "MYR",
         validation_status: "parsed",
         risk_level: "low",
         approval_state: "waiting_approval",

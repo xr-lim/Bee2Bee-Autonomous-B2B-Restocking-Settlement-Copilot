@@ -461,14 +461,14 @@ function AddProductDialog({
               className="h-9 rounded-[10px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB]"
             />
           </Field>
-          <Field label="Unit cost (USD)">
+          <Field label="Unit cost (RM)">
             <Input
               type="number"
               min={0}
               step="0.01"
               value={unitCost}
               onChange={(event) => setUnitCost(event.target.value)}
-              placeholder="12.50"
+              placeholder="50.00"
               className="h-9 rounded-[10px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB]"
             />
           </Field>
