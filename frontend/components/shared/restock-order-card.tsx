@@ -46,7 +46,7 @@ export function RestockOrderCard({
         {!compact ? (
           <div className="mt-4 rounded-[12px] border border-[#243047] bg-[#172033] p-4">
             <p className="text-[12px] font-medium text-[#C4B5FD]">
-              After approval Z.AI will automate:
+              After approval AI will automate:
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {recommendation.automationPlan.map((step) => (
@@ -61,7 +61,7 @@ export function RestockOrderCard({
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-[12px] text-[#9CA3AF]">
-            User approves the restock once. Z.AI handles supplier negotiation,
+            User approves the restock once. AI handles supplier negotiation,
             order creation, and invoice routing unless interrupted.
           </p>
           <div className="flex items-center gap-2">

@@ -5,6 +5,7 @@ import {
   Pencil,
   CheckSquare,
   ChevronDown,
+  Check,
   Plus,
   Search,
   Square,
@@ -32,6 +33,7 @@ import type { Product, StatusTone, Supplier } from "@/lib/types"
 import {
   DEFAULT_SUPPLIER_LANGUAGE,
   getLanguageLabel,
+  normalizeSupplierPreferredLanguage,
   SUPPLIER_LANGUAGE_OPTIONS,
   type SupplierPreferredLanguage,
 } from "@/lib/supplier-language"
@@ -502,7 +504,9 @@ function SupplierDialog({
   )
   const [preferredLanguage, setPreferredLanguage] =
     useState<SupplierPreferredLanguage>(
-      initialValues?.preferredLanguage ?? DEFAULT_SUPPLIER_LANGUAGE
+      normalizeSupplierPreferredLanguage(
+        initialValues?.preferredLanguage ?? DEFAULT_SUPPLIER_LANGUAGE
+      )
     )
   const [error, setError] = useState<string | null>(null)
 
@@ -567,19 +571,10 @@ function SupplierDialog({
             />
           </Field>
           <Field label="Preferred Language" className="col-span-2">
-            <select
+            <LanguageCombobox
               value={preferredLanguage}
-              onChange={(event) =>
-                setPreferredLanguage(event.target.value as SupplierPreferredLanguage)
-              }
-              className="h-10 w-full rounded-[10px] border border-[#243047] bg-[#0B1220] px-3 text-[14px] text-[#E5E7EB] outline-none"
-            >
-              {SUPPLIER_LANGUAGE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              onChange={setPreferredLanguage}
+            />
           </Field>
           <Field label="Status">
             <select
@@ -656,6 +651,106 @@ function SupplierDialog({
         </DialogFooter>
       </form>
     </DialogContent>
+  )
+}
+
+function LanguageCombobox({
+  value,
+  onChange,
+}: {
+  value: SupplierPreferredLanguage
+  onChange: (value: SupplierPreferredLanguage) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const selected = normalizeSupplierPreferredLanguage(value)
+  const filteredOptions = useMemo(() => {
+    const keyword = search.trim().toLowerCase()
+    if (!keyword) return SUPPLIER_LANGUAGE_OPTIONS
+
+    return SUPPLIER_LANGUAGE_OPTIONS.filter(
+      (option) =>
+        option.label.toLowerCase().includes(keyword) ||
+        option.value.toLowerCase().includes(keyword)
+    )
+  }, [search])
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-10 w-full items-center justify-between rounded-[10px] border border-[#243047] bg-[#0B1220] px-3 text-left text-[14px] text-[#E5E7EB] outline-none transition-colors hover:border-[#3B82F6]/45 focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="truncate">
+          {getLanguageLabel(selected)}{" "}
+          <span className="text-[#6B7280]">({selected})</span>
+        </span>
+        <ChevronDown
+          className={cn("size-4 text-[#6B7280] transition-transform", open && "rotate-180")}
+          aria-hidden="true"
+        />
+      </button>
+
+      {open ? (
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-[10px] border border-[#243047] bg-[#0B1220] shadow-xl ring-1 ring-black/20">
+          <div className="border-b border-[#243047] p-2">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[#6B7280]"
+                aria-hidden="true"
+              />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search language or code..."
+                className="h-8 rounded-[8px] border-[#243047] bg-[#111827] pl-8 text-[13px] text-[#E5E7EB] placeholder:text-[#6B7280]"
+                autoFocus
+              />
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto p-1" role="listbox">
+            {filteredOptions.map((option) => {
+              const isSelected = option.value === selected
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    onChange(option.value)
+                    setSearch("")
+                    setOpen(false)
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[13px] transition-colors",
+                    isSelected
+                      ? "bg-[#3B82F6]/15 text-[#BFDBFE]"
+                      : "text-[#E5E7EB] hover:bg-[#172033]"
+                  )}
+                >
+                  <span className="truncate">{option.label}</span>
+                  <span className="ml-3 flex shrink-0 items-center gap-2 font-mono text-[11px] text-[#9CA3AF]">
+                    {option.value}
+                    {isSelected ? (
+                      <Check className="size-3.5 text-[#3B82F6]" aria-hidden="true" />
+                    ) : null}
+                  </span>
+                </button>
+              )
+            })}
+            {filteredOptions.length === 0 ? (
+              <p className="px-2.5 py-3 text-[13px] text-[#6B7280]">
+                No language found.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 

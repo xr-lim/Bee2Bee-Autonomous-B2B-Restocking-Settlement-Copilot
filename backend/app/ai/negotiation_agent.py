@@ -6,6 +6,7 @@ from typing import Any
 from app.ai.client import create_message, extract_text
 from app.ai.tools import (
     NEGOTIATION_SYSTEM_PROMPT,
+    get_last_supplier_conversation_messages,
     get_restock_context,
     update_conversation_state,
     create_final_order,
@@ -20,6 +21,8 @@ async def run_negotiation_agent(
     file_url: str | None = None,
     file_name: str | None = None,
     file_type: str | None = None,
+    auto_translate_enabled: bool = True,
+    resume_existing: bool = False,
 ) -> str:
     """Run the negotiation agent for restock order discussions.
 
@@ -31,10 +34,32 @@ async def run_negotiation_agent(
     Returns:
         The agent's response text
     """
+    language_instruction = (
+        "Auto-translation is enabled. Use the supplier preferred language from the restock context for supplier-facing messages."
+        if auto_translate_enabled
+        else (
+            "Auto-translation is disabled for this conversation. "
+            "Ignore the supplier preferred language for output and write every supplier-facing message in English. "
+            "Still preserve product names, company names, SKU values, prices, quantities, delivery dates, currency codes, invoice numbers, and payment terms exactly."
+        )
+    )
+
     # Prepare the input message
-    if supplier_message is None and not file_url:
+    if resume_existing:
+        input_message = (
+            f"Resume autonomous negotiation for conversation {conversation_id}. "
+            "Do NOT make a fresh initial proposal. "
+            "First use get_restock_context with conversation_id to get product, quantity, target prices, supplier language, and current state. "
+            "Also use get_last_supplier_conversation_messages with conversation_id and limit 8 to inspect the latest thread. "
+            "Continue from the most recent meaningful supplier/admin exchange. "
+            "If the latest supplier message still needs a response, reply to that supplier message. "
+            "If the latest merchant/admin message already answered the supplier and no supplier reply is pending, send a short natural follow-up asking the supplier to confirm. "
+            "Never repeat the original opening offer unless the conversation has no previous supplier-facing messages. "
+            f"{language_instruction}"
+        )
+    elif supplier_message is None and not file_url:
         # Starting negotiation - agent should formulate initial proposal
-        input_message = f"Start a negotiation for conversation {conversation_id}. Get the context and make an initial proposal."
+        input_message = f"Start a negotiation for conversation {conversation_id}. Get the context and make an initial proposal. {language_instruction}"
 
         # Explicitly give the agent the ID so it doesn't guess
         if restock_request_id:
@@ -60,12 +85,38 @@ async def run_negotiation_agent(
 
         input_parts.append(
             "ALWAYS start by using get_restock_context with conversation_id to get the target prices and product details. "
-            "Then evaluate the supplier's offer against our budget constraints."
+            "Then evaluate the supplier's offer against our budget constraints. "
+            f"{language_instruction}"
         )
 
         input_message = " ".join(input_parts)
 
     tools = [
+        {
+            "name": "get_last_supplier_conversation_messages",
+            "description": "Fetch the recent message buffer for a supplier negotiation thread",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "conversation_id": {
+                        "type": "string",
+                        "description": "Exact conversation ID to look up"
+                    },
+                    "supplier_id": {
+                        "type": "string",
+                        "description": "Supplier ID to locate the latest conversation if conversation_id is unavailable"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of recent messages to return"
+                    }
+                },
+                "oneOf": [
+                    {"required": ["conversation_id"]},
+                    {"required": ["supplier_id"]}
+                ]
+            }
+        },
         {
             "name": "get_restock_context",
             "description": "Get the context for a restock request including target prices and product details",
@@ -304,6 +355,8 @@ async def run_negotiation_agent(
                 try:
                     if tool_name == "get_restock_context":
                         result = get_restock_context.invoke(tool_input)
+                    elif tool_name == "get_last_supplier_conversation_messages":
+                        result = get_last_supplier_conversation_messages.invoke(tool_input)
                     elif tool_name == "update_conversation_state":
                         result = update_conversation_state.invoke(tool_input)
                     elif tool_name == "create_final_order":

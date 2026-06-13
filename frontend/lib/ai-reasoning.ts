@@ -25,7 +25,7 @@ export function buildThresholdReasoning(
   signals.push({
     kind: delta >= 0 ? "velocity-up" : "velocity-down",
     label: `${directionLabel} by ${Math.abs(delta)} units`,
-    detail: `Z.AI proposes ${request.currentThreshold} → ${request.proposedThreshold} (${
+    detail: `AI proposes ${request.currentThreshold} → ${request.proposedThreshold} (${
       request.changePercent >= 0 ? "+" : ""
     }${request.changePercent}%).`,
     tone: delta >= 0 ? "risk" : "positive",
@@ -37,7 +37,7 @@ export function buildThresholdReasoning(
         kind: "promotion",
         label: "Demand spike detected",
         detail:
-          "Forecast demand trending above baseline — Z.AI attributes this to a seasonal or promo uplift signal.",
+          "Forecast demand trending above baseline — AI attributes this to a seasonal or promo uplift signal.",
         tone: "risk",
       })
       break
@@ -109,7 +109,7 @@ export function buildThresholdReasoning(
       signals.push({
         kind: "lead-time",
         label: `Preferred supplier lead time ${preferred.leadTimeDays}d`,
-        detail: `Z.AI weighs ${product.suppliers.length} supplier options; preferred lead time drives the buffer calculation.`,
+        detail: `AI weighs ${product.suppliers.length} supplier options; preferred lead time drives the buffer calculation.`,
         tone: "neutral",
       })
     }
@@ -294,7 +294,7 @@ export function buildConversationReasoning(
     label: `Delivery estimate: ${conversation.aiExtraction.deliveryEstimate}`,
     detail:
       conversation.aiExtraction.deliveryEstimate.toLowerCase().includes("or")
-        ? "Supplier proposed multiple delivery dates — Z.AI flagged the conflict for operator review."
+        ? "Supplier proposed multiple delivery dates — AI flagged the conflict for operator review."
         : "Single delivery date confirmed; no scheduling conflict detected.",
     tone: conversation.aiExtraction.deliveryEstimate
       .toLowerCase()
@@ -310,7 +310,7 @@ export function buildConversationReasoning(
       kind: "language",
       label: `Supplier language: ${conversation.aiExtraction.supplierLanguage}`,
       detail:
-        "Z.AI auto-translated the thread before extracting fields; both sides continue in the supplier's language.",
+        "AI auto-translated the thread before extracting fields; both sides continue in the supplier's language.",
       tone: "ai",
     })
   }
@@ -400,7 +400,7 @@ export function getEvidenceSourceMessageId(
       )
     case "supplierLanguage":
       return (
-        supplierMessages.find((message) => message.language && message.language !== "EN")?.id ??
+        supplierMessages.find((message) => message.language && message.language !== "en")?.id ??
         supplierMessages[0]?.id
       )
     case "detectedIntent":

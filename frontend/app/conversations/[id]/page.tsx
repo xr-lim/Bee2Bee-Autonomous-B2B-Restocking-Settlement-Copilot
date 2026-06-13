@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { AlertTriangle, CircleStop } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import { notFound } from "next/navigation"
 
 import { PageHeader } from "@/components/layout/page-header"
@@ -68,13 +68,6 @@ export default async function ConversationDetailPage({
         actions={
           <>
             <Button
-              type="button"
-              className="h-10 rounded-[10px] bg-[#EF4444] px-4 text-white hover:bg-[#DC2626]"
-            >
-              <CircleStop className="size-4" aria-hidden="true" />
-              Stop Z.AI
-            </Button>
-            <Button
               asChild
               variant="outline"
               className="h-10 rounded-[10px] border-[#243047] bg-[#172033] px-4 text-[#E5E7EB] hover:bg-[#243047]"
@@ -93,11 +86,11 @@ export default async function ConversationDetailPage({
       ) : null}
 
       <ConversationWorkspace
+        key={conversation.id}
         conversation={conversation}
         supplier={supplier}
         linkedProducts={linkedProducts}
         invoicesById={invoicesById}
-        linkedInvoice={linkedInvoice}
       />
     </>
   )
@@ -214,7 +207,7 @@ function PriorityBrief({
             </span>
             <span className="text-[13px] text-[#9CA3AF]">
               {reasons.length} signal{reasons.length > 1 ? "s" : ""} detected
-              by Z.AI
+              by AI
             </span>
           </div>
           <ul className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2">

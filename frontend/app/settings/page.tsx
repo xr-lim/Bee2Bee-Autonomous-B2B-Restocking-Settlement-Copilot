@@ -8,7 +8,7 @@ const automationPolicies = [
   {
     label: "Autonomous supplier negotiation",
     value: "Enabled",
-    detail: "Z.AI can negotiate within approved price and quantity guardrails.",
+    detail: "AI can negotiate within approved price and quantity guardrails.",
   },
   {
     label: "Invoice auto-routing",
@@ -18,7 +18,7 @@ const automationPolicies = [
   {
     label: "Restock approval trigger",
     value: "Merchant confirms",
-    detail: "The operator approves restock once before Z.AI automates execution.",
+    detail: "The operator approves restock once before AI automates execution.",
   },
 ]
 
@@ -67,7 +67,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <p className="text-[14px] font-semibold text-[#E5E7EB]">
-                    Z.AI Active
+                    AI Active
                   </p>
                   <p className="mt-1 text-[12px] text-[#9CA3AF]">
                     Monitoring stock, supplier, and invoice signals.

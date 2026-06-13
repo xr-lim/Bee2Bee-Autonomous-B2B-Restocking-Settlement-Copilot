@@ -131,6 +131,7 @@ type RawSupplier = {
   leadTimeDays: number
   reliabilityScore: number
   status?: Supplier["status"]
+  preferredLanguageCode?: string | null
   preferredLanguage?: string | null
   moq?: number | null
   notes?: string | null
@@ -835,7 +836,7 @@ function mapSuppliers(suppliers: RawSupplier[]): Supplier[] {
     status:
       supplier.status ?? reliabilityStatus(Number(supplier.reliabilityScore)),
     preferredLanguage: normalizeSupplierPreferredLanguage(
-      supplier.preferredLanguage
+      supplier.preferredLanguageCode ?? supplier.preferredLanguage
     ),
   }))
 }
@@ -1279,7 +1280,7 @@ function mapMessages(
       language:
         message.senderType === "supplier" || message.senderType === "ai"
           ? getMessageLanguageCode(supplier?.preferredLanguage)
-          : "EN",
+          : "en",
     }
   })
 }

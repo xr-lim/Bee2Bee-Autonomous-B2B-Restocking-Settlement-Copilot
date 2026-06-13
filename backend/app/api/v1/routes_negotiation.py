@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 import traceback
 import logging
 
+from app.ai.client import AITemporaryUnavailableError
 from app.ai.negotiation_agent import run_negotiation_agent
 from app.db.session import SessionLocal
 from app.models.message import Message
@@ -22,6 +23,10 @@ class StartNegotiationRequest(BaseModel):
     restock_request_id: str | None = Field(
         default=None,
         description="Optional restock request ID. If not provided, the agent will find it from the conversation.",
+    )
+    auto_translate_enabled: bool = Field(
+        default=True,
+        description="When false, supplier-facing AI replies should be generated in English instead of the supplier preferred language.",
     )
 
 class SupplierReplyRequest(BaseModel):
@@ -45,6 +50,21 @@ class SupplierReplyRequest(BaseModel):
     file_type: str | None = Field(
         default=None,
         description="Optional uploaded file MIME type.",
+    )
+    auto_translate_enabled: bool = Field(
+        default=True,
+        description="When false, supplier-facing AI replies should be generated in English instead of the supplier preferred language.",
+    )
+
+class ResumeNegotiationRequest(BaseModel):
+    conversation_id: str = Field(
+        ...,
+        min_length=1,
+        description="The paused conversation ID to resume.",
+    )
+    auto_translate_enabled: bool = Field(
+        default=True,
+        description="When false, supplier-facing AI replies should be generated in English instead of the supplier preferred language.",
     )
 
 async def _emit_ai_message(conversation_id: str, content: str) -> None:
@@ -111,7 +131,8 @@ async def start_negotiation(request: StartNegotiationRequest):
         # Pass both IDs to the agent
         response = await run_negotiation_agent(
             conversation_id=request.conversation_id,
-            restock_request_id=request.restock_request_id
+            restock_request_id=request.restock_request_id,
+            auto_translate_enabled=request.auto_translate_enabled,
         )
         await _emit_ai_message(request.conversation_id, response)
         return {
@@ -130,6 +151,35 @@ async def start_negotiation(request: StartNegotiationRequest):
         )
         detail = str(e).strip() or f"{type(e).__name__}: {repr(e)}"
         raise HTTPException(status_code=500, detail=f"Negotiation failed: {detail}")
+
+@router.post("/resume")
+async def resume_negotiation(request: ResumeNegotiationRequest):
+    """Resume a paused negotiation from the latest saved conversation context."""
+    try:
+        response = await run_negotiation_agent(
+            conversation_id=request.conversation_id,
+            auto_translate_enabled=request.auto_translate_enabled,
+            resume_existing=True,
+        )
+        await _emit_ai_message(request.conversation_id, response)
+        return {
+            "conversation_id": request.conversation_id,
+            "status": "resumed",
+            "message": response,
+        }
+    except AITemporaryUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print("🔥 FULL TRACEBACK for negotiation resume failure:")
+        traceback.print_exc()
+        logger.exception(
+            "Negotiation resume failed for conversation_id=%s",
+            request.conversation_id,
+        )
+        detail = str(e).strip() or f"{type(e).__name__}: {repr(e)}"
+        raise HTTPException(status_code=500, detail=f"Negotiation resume failed: {detail}")
 
 @router.post("/webhook")
 async def supplier_reply(request: SupplierReplyRequest):
@@ -167,6 +217,7 @@ async def supplier_reply(request: SupplierReplyRequest):
             file_url=request.file_url,
             file_name=request.file_name,
             file_type=request.file_type,
+            auto_translate_enabled=request.auto_translate_enabled,
         )
         await _emit_ai_message(request.conversation_id, response)
         return {
@@ -174,6 +225,8 @@ async def supplier_reply(request: SupplierReplyRequest):
             "status": "response",
             "message": response,
         }
+    except AITemporaryUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

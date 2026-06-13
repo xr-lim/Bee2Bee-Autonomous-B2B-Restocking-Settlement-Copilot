@@ -170,7 +170,7 @@ export default async function InventoryDetailPage({
               Threshold Analysis
             </CardTitle>
             <p className="mt-1 text-[13px] leading-5 text-[#9CA3AF]">
-              Z.AI&apos;s recommendation for the current reorder threshold.
+              AI&apos;s recommendation for the current reorder threshold.
             </p>
           </CardHeader>
           <CardContent className="space-y-4 p-5">

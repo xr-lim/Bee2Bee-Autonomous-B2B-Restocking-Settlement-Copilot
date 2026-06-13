@@ -39,6 +39,9 @@ create table public.suppliers (
   id text primary key,
   name text not null,
   region text not null,
+  preferred_language_code text not null default 'en' check (
+    preferred_language_code ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'
+  ),
   preferred_language varchar(10) not null default 'en' check (
     preferred_language in ('en', 'ms', 'zh')
   ),

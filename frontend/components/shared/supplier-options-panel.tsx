@@ -31,7 +31,7 @@ export function SupplierOptionsPanel({
               Supplier options
             </CardTitle>
             <p className="mt-1 text-[12px] leading-5 text-[#9CA3AF]">
-              Z.AI compares last deal price, lead time, MOQ and reliability across
+              AI compares last deal price, lead time, MOQ and reliability across
               all suppliers serving this SKU to pick the right partner for each
               restock.
             </p>
@@ -50,7 +50,7 @@ export function SupplierOptionsPanel({
           <span>Lead Time</span>
           <span>MOQ</span>
           <span>Reliability</span>
-          <span className="text-right">Z.AI verdict</span>
+          <span className="text-right">AI verdict</span>
         </div>
 
         <div className="divide-y divide-[#243047]">
@@ -115,7 +115,7 @@ export function SupplierOptionsPanel({
 
                 <div className="flex flex-col items-end gap-1">
                   {isPick ? (
-                    <StatusBadge label="Z.AI pick" tone="ai" />
+                    <StatusBadge label="AI pick" tone="ai" />
                   ) : (
                     <StatusBadge label="Alternate" tone="default" />
                   )}
@@ -139,7 +139,7 @@ export function SupplierOptionsPanel({
             <Bot className="size-4 text-[#8B5CF6]" aria-hidden="true" />
           </div>
           <p className="text-[12px] leading-5 text-[#9CA3AF]">
-            <span className="font-medium text-[#C4B5FD]">Z.AI rationale · </span>
+            <span className="font-medium text-[#C4B5FD]">AI rationale · </span>
             Selected{" "}
             <span className="font-semibold text-[#E5E7EB]">
               {preferredSupplier?.name ?? preferred.supplierId}

@@ -238,7 +238,7 @@ export function InventoryTableClient({
                         </p>
                         {product.pendingAiAnalysis ? (
                           <StatusBadge
-                            label="Pending Z.AI analysis"
+                            label="Pending AI analysis"
                             tone="ai"
                           />
                         ) : null}
@@ -386,7 +386,7 @@ function AddProductDialog({
           Add new product
         </DialogTitle>
         <DialogDescription className="text-[12px] text-[#9CA3AF]">
-          Seed the SKU with your current stock and threshold. Z.AI will analyse
+          Seed the SKU with your current stock and threshold. AI will analyse
           velocity, seasonality, and supplier lead time, then propose a tuned
           threshold in the review queue.
         </DialogDescription>
@@ -478,8 +478,8 @@ function AddProductDialog({
           <Sparkles className="size-4 shrink-0 text-[#C4B5FD]" aria-hidden="true" />
           <p className="text-[12px] leading-5 text-[#C4B5FD]">
             After save, the SKU lands in the list flagged{" "}
-            <span className="font-semibold">Pending Z.AI analysis</span>. Once 7
-            days of velocity data are available, Z.AI will submit a refined
+            <span className="font-semibold">Pending AI analysis</span>. Once 7
+            days of velocity data are available, AI will submit a refined
             threshold to the review queue.
           </p>
         </div>

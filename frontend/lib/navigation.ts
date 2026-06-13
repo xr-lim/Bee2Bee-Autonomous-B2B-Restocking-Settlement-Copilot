@@ -53,5 +53,5 @@ export const bottomNavigationItems: NavigationItem[] = [
 
 export const workspaceNavigationMeta = {
   name: "Bee2Bee Restock Copilot",
-  assistantLabel: "Z.AI",
+  assistantLabel: "AI",
 }

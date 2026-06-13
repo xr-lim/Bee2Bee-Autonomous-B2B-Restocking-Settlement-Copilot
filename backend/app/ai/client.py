@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import asyncio
 from typing import Any
 
 import httpx
@@ -23,6 +24,18 @@ from app.core.config import (
 
 
 logger = logging.getLogger(__name__)
+
+
+class AITemporaryUnavailableError(RuntimeError):
+    """Raised when the upstream AI provider is temporarily unavailable."""
+
+
+def _is_retryable_ai_status(status_code: int | None) -> bool:
+    return status_code in {429, 500, 502, 503, 504}
+
+
+async def _sleep_before_retry(attempt: int) -> None:
+    await asyncio.sleep(min(1.5 * (2**attempt), 8.0))
 
 def _messages_endpoint() -> str:
     if AI_PROVIDER == "gemini":
@@ -286,7 +299,8 @@ async def _create_message_gemini(
 
     timeout_seconds = float(AI_TIMEOUT_SECONDS)
 
-    for attempt in range(2):
+    max_attempts = 4
+    for attempt in range(max_attempts):
         try:
             client = AsyncOpenAI(
                 api_key=GEMINI_API_KEY,
@@ -302,23 +316,37 @@ async def _create_message_gemini(
             status_code = getattr(exc, "status_code", None)
             response_body = getattr(exc, "response", None)
             if status_code is not None:
+                response_text = getattr(response_body, "text", "")
                 logger.error(
-                    "Gemini OpenAI-compatible API returned non-2xx: %s %s\nResponse body:\n%s",
+                    "Gemini OpenAI-compatible API returned non-2xx (attempt %s/%s): %s %s\nResponse body:\n%s",
+                    attempt + 1,
+                    max_attempts,
                     status_code,
                     _messages_endpoint(),
-                    getattr(response_body, "text", ""),
+                    response_text,
                 )
+                if _is_retryable_ai_status(int(status_code)) and attempt < max_attempts - 1:
+                    await _sleep_before_retry(attempt)
+                    continue
+                if _is_retryable_ai_status(int(status_code)):
+                    raise AITemporaryUnavailableError(
+                        "The AI model is temporarily unavailable or under high demand. Please try again in a moment."
+                    ) from exc
                 raise
 
             error_name = type(exc).__name__
             if error_name in {"APITimeoutError", "TimeoutError"}:
                 logger.warning(
-                    "Gemini request timeout (attempt %s/2): %s",
+                    "Gemini request timeout (attempt %s/%s): %s",
                     attempt + 1,
+                    max_attempts,
                     repr(exc),
                 )
-                if attempt == 1:
-                    raise
+                if attempt == max_attempts - 1:
+                    raise AITemporaryUnavailableError(
+                        "The AI model timed out. Please try again in a moment."
+                    ) from exc
+                await _sleep_before_retry(attempt)
                 continue
             raise
 
@@ -380,7 +408,8 @@ async def create_message(
         is_ai_configured(),
         masked_ai_secret(),
     )
-    for attempt in range(2):
+    max_attempts = 4
+    for attempt in range(max_attempts):
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 if attempt == 0:
@@ -390,22 +419,38 @@ async def create_message(
                     response.raise_for_status()
                 except httpx.HTTPStatusError as exc:
                     logger.error(
-                        "LLM API returned non-2xx: %s %s\nResponse body:\n%s",
+                        "LLM API returned non-2xx (attempt %s/%s): %s %s\nResponse body:\n%s",
+                        attempt + 1,
+                        max_attempts,
                         exc.response.status_code,
                         str(exc.request.url),
                         exc.response.text,
                     )
+                    if (
+                        _is_retryable_ai_status(exc.response.status_code)
+                        and attempt < max_attempts - 1
+                    ):
+                        await _sleep_before_retry(attempt)
+                        continue
+                    if _is_retryable_ai_status(exc.response.status_code):
+                        raise AITemporaryUnavailableError(
+                            "The AI model is temporarily unavailable or under high demand. Please try again in a moment."
+                        ) from exc
                     raise
 
                 return response.json()
         except (httpx.ReadTimeout, httpx.ConnectTimeout) as exc:
             logger.warning(
-                "LLM request timeout (attempt %s/2): %s",
+                "LLM request timeout (attempt %s/%s): %s",
                 attempt + 1,
+                max_attempts,
                 repr(exc),
             )
-            if attempt == 1:
-                raise
+            if attempt == max_attempts - 1:
+                raise AITemporaryUnavailableError(
+                    "The AI model timed out. Please try again in a moment."
+                ) from exc
+            await _sleep_before_retry(attempt)
 
 
 def messages_endpoint() -> str:

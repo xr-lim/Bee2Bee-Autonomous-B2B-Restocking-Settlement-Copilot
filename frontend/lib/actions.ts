@@ -25,13 +25,18 @@ import {
 } from "@/lib/supabase/server"
 import {
   DEFAULT_SUPPLIER_LANGUAGE,
-  isSupplierPreferredLanguage,
+  getLanguageLabel,
+  normalizeSupplierPreferredLanguage,
   type SupplierPreferredLanguage,
 } from "@/lib/supplier-language"
 
 type ActionResult = {
   ok: boolean
   message?: string
+}
+
+type TranslationActionResult = ActionResult & {
+  translation?: string
 }
 
 type ThresholdAnalysisActionResult = ActionResult & {
@@ -143,6 +148,10 @@ type RepairParsedFieldsOptions = {
 type StartRestockWorkflowPayload = {
   productId: string
   sku: string
+  targetPrice?: string
+  quantity?: number
+  reason?: string
+  supplierId?: string
 }
 
 type CreateRestockRequestPayload = {
@@ -172,6 +181,38 @@ type UpdateRestockRequestPayload = {
   quantity: number
   reason: string
   supplierId?: string
+}
+
+type UpdateConversationTargetPriceRangePayload = {
+  conversationId: string
+  targetPriceMin: number
+  targetPriceMax: number
+}
+
+type StopConversationAiPayload = {
+  conversationId: string
+}
+
+type ResumeConversationAiPayload = {
+  conversationId: string
+}
+
+type SendManualConversationMessagePayload = {
+  conversationId: string
+  supplierId: string
+  message: string
+  autoTranslateEnabled?: boolean
+  languageCode?: string
+}
+
+type SendPausedSupplierReplyPayload = {
+  conversationId: string
+  message: string
+}
+
+type TranslateConversationMessagePayload = {
+  message: string
+  languageCode?: string
 }
 
 function requireSupabase() {
@@ -221,16 +262,7 @@ function cleanText(value: string) {
 function resolveSupplierPreferredLanguage(
   value?: string | null
 ): SupplierPreferredLanguage {
-  if (!value) {
-    return DEFAULT_SUPPLIER_LANGUAGE
-  }
-
-  const normalized = value.trim().toLowerCase()
-  if (!isSupplierPreferredLanguage(normalized)) {
-    throw new Error("Preferred language must be one of: en, ms, zh.")
-  }
-
-  return normalized
+  return normalizeSupplierPreferredLanguage(value ?? DEFAULT_SUPPLIER_LANGUAGE)
 }
 
 function sleep(ms: number) {
@@ -1643,7 +1675,7 @@ export async function createSupplierAction(
       lead_time_days: payload.leadTimeDays,
       reliability_score: payload.reliabilityScore,
       status: payload.status,
-      preferred_language: preferredLanguage,
+      preferred_language_code: preferredLanguage,
       moq: null,
       notes: "Added from supplier registry.",
     }
@@ -1653,12 +1685,20 @@ export async function createSupplierAction(
         await supabase.from("suppliers").insert(insertPayload)
       )
     } catch (error) {
-      if (!isMissingSupabaseColumnError(error, "suppliers", "preferred_language")) {
+      if (!isMissingSupabaseColumnError(error, "suppliers", "preferred_language_code")) {
         throw error
       }
 
+      if (!["en", "ms", "zh"].includes(preferredLanguage)) {
+        throw new Error(
+          "Supabase is missing suppliers.preferred_language_code. Run the latest supplier language migration before saving this language."
+        )
+      }
+
       const legacyPayload = { ...insertPayload }
-      delete (legacyPayload as { preferred_language?: string }).preferred_language
+      delete (legacyPayload as { preferred_language_code?: string }).preferred_language_code
+      ;(legacyPayload as { preferred_language?: string }).preferred_language =
+        preferredLanguage
       await throwIfSupabaseError(
         await supabase.from("suppliers").insert(legacyPayload)
       )
@@ -1698,7 +1738,7 @@ export async function updateSupplierAction(
       lead_time_days: payload.leadTimeDays,
       reliability_score: payload.reliabilityScore,
       status: payload.status,
-      preferred_language: preferredLanguage,
+      preferred_language_code: preferredLanguage,
     }
 
     try {
@@ -1709,12 +1749,20 @@ export async function updateSupplierAction(
           .eq("id", payload.supplierId)
       )
     } catch (error) {
-      if (!isMissingSupabaseColumnError(error, "suppliers", "preferred_language")) {
+      if (!isMissingSupabaseColumnError(error, "suppliers", "preferred_language_code")) {
         throw error
       }
 
+      if (!["en", "ms", "zh"].includes(preferredLanguage)) {
+        throw new Error(
+          "Supabase is missing suppliers.preferred_language_code. Run the latest supplier language migration before saving this language."
+        )
+      }
+
       const legacyPayload = { ...updatePayload }
-      delete (legacyPayload as { preferred_language?: string }).preferred_language
+      delete (legacyPayload as { preferred_language_code?: string }).preferred_language_code
+      ;(legacyPayload as { preferred_language?: string }).preferred_language =
+        preferredLanguage
       await throwIfSupabaseError(
         await supabase
           .from("suppliers")
@@ -2073,6 +2121,15 @@ export async function startRestockWorkflowAction(
         .limit(1)
     )
     const existingWorkflow = (existingWorkflows ?? [])[0]
+    if (payload.quantity != null && payload.quantity < 0) {
+      throw new Error("Quantity must be zero or greater.")
+    }
+
+    const targetPriceRange =
+      payload.targetPrice != null
+        ? parseTargetPriceRange(payload.targetPrice)
+        : { min: null, max: null }
+
     const product = await throwIfSupabaseError(
       await supabase
         .from("products")
@@ -2087,11 +2144,57 @@ export async function startRestockWorkflowAction(
 
     let workflowId = existingWorkflow?.id as string | undefined
     const requestedQuantity =
+      payload.quantity ??
       (existingWorkflow?.quantity as number | null | undefined) ??
       Math.max(
         Number(product.current_threshold) - Number(product.current_stock),
         Number(product.current_threshold)
       )
+    const supplierId = payload.supplierId || product.primary_supplier_id
+
+    if (payload.supplierId && payload.supplierId !== product.primary_supplier_id) {
+      await throwIfSupabaseError(
+        await supabase
+          .from("products")
+          .update({ primary_supplier_id: payload.supplierId })
+          .eq("id", payload.productId)
+      )
+
+      const existingSupplierLink = await throwIfSupabaseError(
+        await supabase
+          .from("product_suppliers")
+          .select("id")
+          .eq("product_id", payload.productId)
+          .eq("supplier_id", payload.supplierId)
+          .maybeSingle()
+      )
+
+      if (!existingSupplierLink) {
+        await throwIfSupabaseError(
+          await supabase.from("product_suppliers").insert({
+            id: id("ps"),
+            product_id: payload.productId,
+            supplier_id: payload.supplierId,
+            is_primary: true,
+          })
+        )
+      }
+
+      await throwIfSupabaseError(
+        await supabase
+          .from("product_suppliers")
+          .update({ is_primary: false })
+          .eq("product_id", payload.productId)
+          .neq("supplier_id", payload.supplierId)
+      )
+      await throwIfSupabaseError(
+        await supabase
+          .from("product_suppliers")
+          .update({ is_primary: true })
+          .eq("product_id", payload.productId)
+          .eq("supplier_id", payload.supplierId)
+      )
+    }
 
     if (workflowId) {
       await throwIfSupabaseError(
@@ -2101,6 +2204,8 @@ export async function startRestockWorkflowAction(
             current_state: "po_sent",
             approval_state: "waiting_approval",
             quantity: requestedQuantity,
+            target_price_min: targetPriceRange.min,
+            target_price_max: targetPriceRange.max,
           })
           .eq("id", workflowId)
       )
@@ -2114,6 +2219,8 @@ export async function startRestockWorkflowAction(
             current_state: "po_sent",
             approval_state: "waiting_approval",
             quantity: requestedQuantity,
+            target_price_min: targetPriceRange.min,
+            target_price_max: targetPriceRange.max,
           })
           .select("id")
           .single()
@@ -2138,7 +2245,7 @@ export async function startRestockWorkflowAction(
       | undefined
 
     if (!conversationId) {
-      if (!product.primary_supplier_id) {
+      if (!supplierId) {
         throw new Error("This product needs a primary supplier before negotiation can begin.")
       }
 
@@ -2146,7 +2253,7 @@ export async function startRestockWorkflowAction(
         await supabase
           .from("conversations")
           .select("id")
-          .eq("supplier_id", product.primary_supplier_id)
+          .eq("supplier_id", supplierId)
           .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle()
@@ -2176,7 +2283,7 @@ export async function startRestockWorkflowAction(
             .from("conversations")
             .insert({
               id: id("conv"),
-              supplier_id: product.primary_supplier_id,
+              supplier_id: supplierId,
               title: `${product.name} restock negotiation`,
               source: "email",
               state: "new_input",
@@ -2250,17 +2357,24 @@ export async function startRestockWorkflowAction(
     const activeRestockRequest = (activeRestockRequests ?? [])[0]
 
     if (activeRestockRequest?.id) {
+      const restockRequestUpdate: Record<string, unknown> = {
+        workflow_id: workflowId,
+        target_price_min:
+          targetPriceRange.min ?? activeRestockRequest.target_price_min ?? null,
+        target_price_max:
+          targetPriceRange.max ?? activeRestockRequest.target_price_max ?? null,
+        requested_threshold: product.current_threshold,
+        requested_quantity: requestedQuantity,
+        status: "accepted",
+      }
+      if (payload.reason) {
+        restockRequestUpdate.reason_summary = cleanText(payload.reason)
+      }
+
       await throwIfSupabaseError(
         await supabase
           .from("restock_requests")
-          .update({
-            workflow_id: workflowId,
-            target_price_min: activeRestockRequest.target_price_min ?? null,
-            target_price_max: activeRestockRequest.target_price_max ?? null,
-            requested_threshold: product.current_threshold,
-            requested_quantity: requestedQuantity,
-            status: "accepted",
-          })
+          .update(restockRequestUpdate)
           .eq("id", activeRestockRequest.id)
       )
 
@@ -2278,12 +2392,14 @@ export async function startRestockWorkflowAction(
           id: id("rr"),
           product_id: payload.productId,
           workflow_id: workflowId,
-          target_price_min: null,
-          target_price_max: null,
+          target_price_min: targetPriceRange.min,
+          target_price_max: targetPriceRange.max,
           requested_threshold: product.current_threshold,
           requested_quantity: requestedQuantity,
           reason_summary:
-            "AI Restock accepted from product detail page after stock review.",
+            payload.reason
+              ? cleanText(payload.reason)
+              : "AI Restock accepted from product detail page after stock review.",
           status: "accepted",
           requested_by: "merchant",
         })
@@ -2504,6 +2620,477 @@ export async function updateRestockRequestAction(
 
     revalidateProductPaths(payload.sku)
     return success("Restock request updated.")
+  } catch (error) {
+    return failure(error)
+  }
+}
+
+async function translateManualSupplierMessage(
+  message: string,
+  languageCode?: string
+) {
+  const normalizedLanguage = normalizeSupplierPreferredLanguage(languageCode)
+  if (normalizedLanguage === "en") return message
+
+  const languageLabel = getLanguageLabel(normalizedLanguage)
+  const response = await fetch(`${backendApiBaseUrl()}/api/v1/ai/copilot`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+    body: JSON.stringify({
+      prompt: [
+        `Rewrite this admin-written supplier message naturally in ${languageLabel} (${normalizedLanguage}).`,
+        "Do not directly translate from English. Write it as a native business message in the supplier's preferred language.",
+        "Only return the final supplier-facing message.",
+        "Do not add explanations, labels, notes, markdown, or quotation marks.",
+        "Preserve product names, company names, SKU values, prices, quantities, delivery dates, currency codes, invoice numbers, and payment terms exactly.",
+        "Keep the tone friendly, firm, polite, professional, and commercially realistic.",
+        "If the message contains a price rejection or counteroffer, acknowledge the supplier's concern and use order quantity, long-term cooperation, or future orders naturally where appropriate.",
+        "",
+        message,
+      ].join("\n"),
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error("Manual translation failed.")
+  }
+
+  const payload = await response.json().catch(() => null)
+  const translated =
+    payload && typeof payload === "object" && typeof payload.answer === "string"
+      ? payload.answer.trim()
+      : ""
+
+  return translated || message
+}
+
+export async function translateConversationMessageToEnglishAction(
+  payload: TranslateConversationMessagePayload
+): Promise<TranslationActionResult> {
+  try {
+    const message = cleanText(payload.message)
+    const normalizedLanguage = normalizeSupplierPreferredLanguage(
+      payload.languageCode
+    )
+
+    if (!message) {
+      throw new Error("Missing message to translate.")
+    }
+
+    if (normalizedLanguage === "en") {
+      return { ok: true, translation: message }
+    }
+
+    const languageLabel = getLanguageLabel(normalizedLanguage)
+    const response = await fetch(`${backendApiBaseUrl()}/api/v1/ai/copilot`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+      body: JSON.stringify({
+        prompt: [
+          `Translate this ${languageLabel} (${normalizedLanguage}) supplier negotiation message into natural English for an admin dashboard.`,
+          "Return only the English translation.",
+          "Do not add labels, notes, markdown, quotes, or explanations.",
+          "Preserve product names, company names, SKU values, prices, quantities, delivery dates, currency codes, invoice numbers, and payment terms exactly.",
+          "Keep the business tone and meaning intact.",
+          "",
+          message,
+        ].join("\n"),
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error("Message translation failed.")
+    }
+
+    const responsePayload = await response.json().catch(() => null)
+    const translation =
+      responsePayload &&
+      typeof responsePayload === "object" &&
+      typeof responsePayload.answer === "string"
+        ? responsePayload.answer.trim()
+        : ""
+
+    return {
+      ok: true,
+      translation: translation || message,
+    }
+  } catch (error) {
+    return failure(error)
+  }
+}
+
+export async function updateConversationTargetPriceRangeAction(
+  payload: UpdateConversationTargetPriceRangePayload
+): Promise<ActionResult> {
+  try {
+    const supabase = requireSupabase()
+
+    if (!payload.conversationId) {
+      throw new Error("Missing conversation identifier.")
+    }
+
+    const min = roundCurrency(Number(payload.targetPriceMin))
+    const max = roundCurrency(Number(payload.targetPriceMax))
+
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      throw new Error("Target price range must contain valid numbers.")
+    }
+    if (min < 0 || max < 0) {
+      throw new Error("Target prices must be zero or greater.")
+    }
+    if (max < min) {
+      throw new Error("Maximum target price must be greater than or equal to minimum target price.")
+    }
+
+    const conversation = await throwIfSupabaseError(
+      await supabase
+        .from("conversations")
+        .select("id")
+        .eq("id", payload.conversationId)
+        .maybeSingle()
+    )
+
+    if (!conversation) {
+      throw new Error("Conversation no longer exists.")
+    }
+
+    const workflows =
+      (await throwIfSupabaseError(
+        await supabase
+          .from("workflows")
+          .select("id,product_id,current_state")
+          .eq("conversation_id", payload.conversationId)
+      )) ?? []
+
+    const workflowIds = workflows.map((workflow) => workflow.id as string)
+    const workflowProductIds = workflows
+      .map((workflow) => workflow.product_id as string | null)
+      .filter((productId): productId is string => Boolean(productId))
+
+    if (workflowIds.length > 0) {
+      await throwIfSupabaseError(
+        await supabase
+          .from("workflows")
+          .update({
+            target_price_min: min,
+            target_price_max: max,
+          })
+          .in("id", workflowIds)
+      )
+
+      await throwIfSupabaseError(
+        await supabase
+          .from("restock_requests")
+          .update({
+            target_price_min: min,
+            target_price_max: max,
+          })
+          .in("workflow_id", workflowIds)
+          .in("status", ["pending", "reviewed", "accepted"])
+      )
+
+      await throwIfSupabaseError(
+        await supabase.from("workflow_events").insert(
+          workflows.map((workflow) => ({
+            id: id("we"),
+            workflow_id: workflow.id,
+            state: workflow.current_state,
+            note: `Admin updated target price range to $${min.toFixed(2)} - $${max.toFixed(2)} for AI negotiation.`,
+            actor_type: "merchant",
+          }))
+        )
+      )
+    }
+
+    const conversationProducts =
+      (await throwIfSupabaseError(
+        await supabase
+          .from("conversation_products")
+          .select("product_id")
+          .eq("conversation_id", payload.conversationId)
+      )) ?? []
+
+    const linkedProductIds = Array.from(
+      new Set([
+        ...workflowProductIds,
+        ...conversationProducts
+          .map((row) => row.product_id as string | null)
+          .filter((productId): productId is string => Boolean(productId)),
+      ])
+    )
+
+    if (linkedProductIds.length > 0) {
+      await throwIfSupabaseError(
+        await supabase
+          .from("restock_requests")
+          .update({
+            target_price_min: min,
+            target_price_max: max,
+          })
+          .in("product_id", linkedProductIds)
+          .in("status", ["pending", "reviewed", "accepted"])
+      )
+    }
+
+    const products =
+      linkedProductIds.length > 0
+        ? (await throwIfSupabaseError(
+            await supabase
+              .from("products")
+              .select("sku")
+              .in("id", linkedProductIds)
+          )) ?? []
+        : []
+
+    revalidatePath("/conversations")
+    revalidatePath(`/conversations/${payload.conversationId}`)
+    revalidatePath("/dashboard")
+    products.forEach((product) => revalidatePath(`/inventory/${product.sku}`))
+
+    return success("Target price range updated for AI negotiation.")
+  } catch (error) {
+    return failure(error)
+  }
+}
+
+export async function stopConversationAiAction(
+  payload: StopConversationAiPayload
+): Promise<ActionResult> {
+  try {
+    const supabase = requireSupabase()
+
+    if (!payload.conversationId) {
+      throw new Error("Missing conversation identifier.")
+    }
+
+    const conversation = await throwIfSupabaseError(
+      await supabase
+        .from("conversations")
+        .update({
+          state: "escalated",
+          priority: "high",
+          latest_message:
+            "Admin stopped autonomous AI negotiation and took over the conversation.",
+        })
+        .eq("id", payload.conversationId)
+        .select("id")
+        .maybeSingle()
+    )
+
+    if (!conversation) {
+      throw new Error("Conversation no longer exists.")
+    }
+
+    await throwIfSupabaseError(
+      await supabase.from("conversation_messages").insert({
+        id: id("msg"),
+        conversation_id: payload.conversationId,
+        sender_type: "system",
+        message_type: "text",
+        content:
+          "Admin stopped autonomous AI negotiation. Manual takeover is now active.",
+        detected_intent: "manual_takeover",
+      })
+    )
+
+    revalidatePath("/conversations")
+    revalidatePath(`/conversations/${payload.conversationId}`)
+    revalidatePath("/dashboard")
+
+    return success("AI stopped. Manual takeover is active.")
+  } catch (error) {
+    return failure(error)
+  }
+}
+
+export async function resumeConversationAiAction(
+  payload: ResumeConversationAiPayload
+): Promise<ActionResult> {
+  try {
+    const supabase = requireSupabase()
+
+    if (!payload.conversationId) {
+      throw new Error("Missing conversation identifier.")
+    }
+
+    const conversation = await throwIfSupabaseError(
+      await supabase
+        .from("conversations")
+        .update({
+          state: "waiting_reply",
+          latest_message: "Admin resumed autonomous AI negotiation.",
+        })
+        .eq("id", payload.conversationId)
+        .select("id")
+        .maybeSingle()
+    )
+
+    if (!conversation) {
+      throw new Error("Conversation no longer exists.")
+    }
+
+    await throwIfSupabaseError(
+      await supabase.from("conversation_messages").insert({
+        id: id("msg"),
+        conversation_id: payload.conversationId,
+        sender_type: "system",
+        message_type: "text",
+        content:
+          "Admin resumed autonomous AI negotiation. The copilot can continue from the latest conversation context.",
+        detected_intent: "ai_resumed",
+      })
+    )
+
+    revalidatePath("/conversations")
+    revalidatePath(`/conversations/${payload.conversationId}`)
+    revalidatePath("/dashboard")
+
+    return success("AI resumed. Autonomous negotiation will continue.")
+  } catch (error) {
+    return failure(error)
+  }
+}
+
+export async function sendManualConversationMessageAction(
+  payload: SendManualConversationMessagePayload
+): Promise<ActionResult> {
+  try {
+    const supabase = requireSupabase()
+    const message = cleanText(payload.message)
+
+    if (!payload.conversationId) {
+      throw new Error("Missing conversation identifier.")
+    }
+    if (!message) {
+      throw new Error("Enter a manual message before sending.")
+    }
+
+    const conversation = await throwIfSupabaseError(
+      await supabase
+        .from("conversations")
+        .select("id,state")
+        .eq("id", payload.conversationId)
+        .maybeSingle()
+    )
+
+    if (!conversation) {
+      throw new Error("Conversation no longer exists.")
+    }
+
+    const shouldTranslate =
+      payload.autoTranslateEnabled &&
+      normalizeSupplierPreferredLanguage(payload.languageCode) !== "en"
+    let outgoingMessage = message
+    let translationFailed = false
+
+    if (shouldTranslate) {
+      try {
+        outgoingMessage = await translateManualSupplierMessage(
+          message,
+          payload.languageCode
+        )
+      } catch {
+        translationFailed = true
+      }
+    }
+
+    await throwIfSupabaseError(
+      await supabase.from("conversation_messages").insert({
+        id: id("msg"),
+        conversation_id: payload.conversationId,
+        sender_type: "merchant",
+        message_type: "text",
+        content: outgoingMessage,
+        detected_intent: shouldTranslate
+          ? translationFailed
+            ? `manual_message_translation_failed:${payload.languageCode ?? "en"}`
+            : `manual_message_translated:${payload.languageCode ?? "en"}`
+          : "manual_message",
+      })
+    )
+
+    await throwIfSupabaseError(
+      await supabase
+        .from("conversations")
+        .update({
+          state: "escalated",
+          latest_message: outgoingMessage,
+        })
+        .eq("id", payload.conversationId)
+    )
+
+    revalidatePath("/conversations")
+    revalidatePath(`/conversations/${payload.conversationId}`)
+
+    return success(
+      translationFailed
+        ? "Manual admin message sent without translation because translation was unavailable."
+        : shouldTranslate
+          ? "Manual admin message translated and sent."
+          : "Manual admin message sent."
+    )
+  } catch (error) {
+    return failure(error)
+  }
+}
+
+export async function sendPausedSupplierReplyAction(
+  payload: SendPausedSupplierReplyPayload
+): Promise<ActionResult> {
+  try {
+    const supabase = requireSupabase()
+    const message = cleanText(payload.message)
+
+    if (!payload.conversationId) {
+      throw new Error("Missing conversation identifier.")
+    }
+    if (!message) {
+      throw new Error("Enter a supplier reply before sending.")
+    }
+
+    const conversation = await throwIfSupabaseError(
+      await supabase
+        .from("conversations")
+        .select("id")
+        .eq("id", payload.conversationId)
+        .maybeSingle()
+    )
+
+    if (!conversation) {
+      throw new Error("Conversation no longer exists.")
+    }
+
+    await throwIfSupabaseError(
+      await supabase.from("conversation_messages").insert({
+        id: id("msg"),
+        conversation_id: payload.conversationId,
+        sender_type: "supplier",
+        message_type: "text",
+        content: message,
+        detected_intent: "paused_supplier_reply",
+      })
+    )
+
+    await throwIfSupabaseError(
+      await supabase
+        .from("conversations")
+        .update({
+          state: "escalated",
+          latest_message: message,
+        })
+        .eq("id", payload.conversationId)
+    )
+
+    revalidatePath("/conversations")
+    revalidatePath(`/conversations/${payload.conversationId}`)
+
+    return success("Supplier reply added while AI is paused.")
   } catch (error) {
     return failure(error)
   }

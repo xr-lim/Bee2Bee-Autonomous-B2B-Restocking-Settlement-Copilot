@@ -1,8 +1,12 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Bot,
+  Check,
+  CircleStop,
   FileImage,
   FileText,
   ImageIcon,
@@ -12,19 +16,30 @@ import {
   Mic,
   Paperclip,
   Pause,
+  Pencil,
   Play,
   ReceiptText,
+  Send,
+  X,
   ZoomIn,
 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
-import { useCallback, useMemo, useState, useEffect, useRef } from "react"
+import { useCallback, useMemo, useState, useEffect, useRef, useTransition } from "react"
 import { io } from "socket.io-client"
 
-import { AiReasoningTrail } from "@/components/shared/ai-reasoning-trail"
 import { StatusBadge } from "@/components/shared/status-badge"
+import {
+  resumeConversationAiAction,
+  sendManualConversationMessageAction,
+  sendPausedSupplierReplyAction,
+  stopConversationAiAction,
+  translateConversationMessageToEnglishAction,
+  updateConversationTargetPriceRangeAction,
+} from "@/lib/actions"
 import { displayConversationSource } from "@/lib/conversation-source"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
   Sheet,
   SheetContent,
@@ -33,12 +48,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import {
-  buildConversationReasoning,
-  getEvidenceSourceMessageId,
-  type ExtractionField,
-} from "@/lib/ai-reasoning"
-import {
   getLanguageLabel,
+  getMessageLanguageBadge,
   getMessageLanguageCode,
   normalizeSupplierPreferredLanguage,
 } from "@/lib/supplier-language"
@@ -57,6 +68,41 @@ import { cn } from "@/lib/utils"
 type MessageWithFileUrl = NegotiationMessage & { file_url?: string | null }
 const fileUrlFor = (message: NegotiationMessage) =>
   (message as MessageWithFileUrl).file_url ?? undefined
+
+function parseTargetPriceRange(value: string) {
+  const matches = value.match(/\d+(?:\.\d+)?/g) ?? []
+  if (matches.length === 0) {
+    return { min: "", max: "" }
+  }
+
+  const first = matches[0] ?? ""
+  const second = matches[1] ?? first
+  return {
+    min: first,
+    max: second,
+  }
+}
+
+function formatTargetPriceRange(min: number, max: number) {
+  return min === max ? `$${min.toFixed(2)}` : `$${min.toFixed(2)} - $${max.toFixed(2)}`
+}
+
+async function readApiErrorMessage(response: Response, fallback: string) {
+  const body = await response.text().catch(() => "")
+  if (!body) return fallback
+
+  try {
+    const parsed = JSON.parse(body) as { detail?: unknown; message?: unknown }
+    const detail = parsed.detail ?? parsed.message
+    if (typeof detail === "string" && detail.trim()) {
+      return detail.trim()
+    }
+  } catch {
+    // Fall back to the raw response body below.
+  }
+
+  return body.trim() || fallback
+}
 
 function splitThinking(body: string) {
   try {
@@ -95,16 +141,6 @@ const invoiceApprovalTone: Record<Invoice["approvalState"], StatusTone> = {
   Completed: "success",
 }
 
-const languageLabel: Record<
-  NonNullable<NegotiationMessage["language"]>,
-  { short: string; full: string }
-> = {
-  EN: { short: "EN", full: "English" },
-  MS: { short: "MS", full: "Malay" },
-  ZH: { short: "中文", full: "Chinese" },
-  JA: { short: "日本語", full: "Japanese" },
-}
-
 const stateTone: Record<NegotiationState, StatusTone> = {
   "New Input": "default",
   "Needs Analysis": "warning",
@@ -140,7 +176,6 @@ type ConversationWorkspaceProps = {
   supplier?: Supplier
   linkedProducts: Product[]
   invoicesById: Record<string, Invoice>
-  linkedInvoice?: Invoice
 }
 
 export function ConversationWorkspace({
@@ -148,8 +183,8 @@ export function ConversationWorkspace({
   supplier,
   linkedProducts,
   invoicesById,
-  linkedInvoice,
 }: ConversationWorkspaceProps) {
+  const router = useRouter()
   type SocketMessagePayload = {
     room_id?: string
     sender?: string
@@ -159,16 +194,17 @@ export function ConversationWorkspace({
     file_type?: string | null
   }
 
-  const [highlightedMessageId, setHighlightedMessageId] = useState<
-    string | null
-  >(null)
   const [preview, setPreview] = useState<PreviewTarget | null>(null)
   const [pulseMessageId, setPulseMessageId] = useState<string | null>(null)
   const [pdfInlineOpen, setPdfInlineOpen] = useState<Record<string, boolean>>({})
 
   const [liveMessages, setLiveMessages] = useState<MessageWithFileUrl[]>([])
+  const [messageTranslations, setMessageTranslations] = useState<
+    Record<string, string>
+  >({})
   const [isWaitingForAI, setIsWaitingForAI] = useState(false)
   const seenMessageSignaturesRef = useRef<Set<string>>(new Set())
+  const translationRequestsRef = useRef<Set<string>>(new Set())
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const autoStartAttemptedRef = useRef(false)
   const imageUploadInputRef = useRef<HTMLInputElement>(null)
@@ -177,7 +213,30 @@ export function ConversationWorkspace({
   // Negotiation state
   const [isNegotiating, setIsNegotiating] = useState(false)
   const [supplierReply, setSupplierReply] = useState("")
+  const [manualMessage, setManualMessage] = useState("")
+  const [manualMessageError, setManualMessageError] = useState<string | null>(null)
   const [isSendingReply, setIsSendingReply] = useState(false)
+  const [manualTakeoverActive, setManualTakeoverActive] = useState(
+    conversation.negotiationState === "Escalated"
+  )
+  const [isPriceRangeEditing, setIsPriceRangeEditing] = useState(false)
+  const [priceRangeMessage, setPriceRangeMessage] = useState<string | null>(null)
+  const [displayTargetPriceRange, setDisplayTargetPriceRange] = useState(
+    conversation.targetPriceRange
+  )
+  const initialTargetPriceRange = parseTargetPriceRange(
+    conversation.targetPriceRange
+  )
+  const [targetPriceMin, setTargetPriceMin] = useState(
+    initialTargetPriceRange.min
+  )
+  const [targetPriceMax, setTargetPriceMax] = useState(
+    initialTargetPriceRange.max
+  )
+  const [isSavingPriceRange, startSavingPriceRange] = useTransition()
+  const [isStoppingAi, startStoppingAi] = useTransition()
+  const [isResumingAi, startResumingAi] = useTransition()
+  const [isSendingManualMessage, startSendingManualMessage] = useTransition()
 
   const isConversationComplete = useMemo(() => {
     const stateRaw =
@@ -193,9 +252,10 @@ export function ConversationWorkspace({
   const shouldAutoStartNegotiation = useMemo(
     () =>
       !isConversationComplete &&
+      !manualTakeoverActive &&
       (conversation.negotiationState === "New Input" ||
         conversation.negotiationState === "Needs Analysis"),
-    [conversation.negotiationState, isConversationComplete]
+    [conversation.negotiationState, isConversationComplete, manualTakeoverActive]
   )
   const supplierPreferredLanguage = normalizeSupplierPreferredLanguage(
     supplier?.preferredLanguage
@@ -206,10 +266,38 @@ export function ConversationWorkspace({
   const supplierMessageLanguage = getMessageLanguageCode(
     supplier?.preferredLanguage
   )
+  const [autoTranslateEnabled, setAutoTranslateEnabled] = useState(
+    supplierPreferredLanguage !== "en"
+  )
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [liveMessages.length])
+
+  useEffect(() => {
+    liveMessages.forEach((message) => {
+      if (messageTranslations[message.id]) return
+      if (translationRequestsRef.current.has(message.id)) return
+      if (!message.language || message.language === "en") return
+      if (message.author !== "supplier" && message.author !== "ai") return
+
+      const { visible } = splitThinking(message.body)
+      const textToTranslate = visible.trim()
+      if (!textToTranslate) return
+
+      translationRequestsRef.current.add(message.id)
+      void translateConversationMessageToEnglishAction({
+        message: textToTranslate,
+        languageCode: message.language,
+      }).then((result) => {
+        if (!result.ok || !result.translation?.trim()) return
+        setMessageTranslations((current) => ({
+          ...current,
+          [message.id]: result.translation!.trim(),
+        }))
+      })
+    })
+  }, [liveMessages, messageTranslations])
 
   useEffect(() => {
     const newSocket = io("http://localhost:8000", { transports: ["websocket"] })
@@ -274,7 +362,13 @@ export function ConversationWorkspace({
           sentiment: "neutral",
           body: content,
           language:
-            isAiSender || isSupplierSender ? supplierMessageLanguage : "EN",
+            isAiSender
+              ? autoTranslateEnabled
+                ? supplierMessageLanguage
+                : "en"
+              : isSupplierSender
+                ? supplierMessageLanguage
+                : "en",
           createdAt: new Date().toISOString(),
           attachmentType,
           attachmentLabel:
@@ -288,11 +382,13 @@ export function ConversationWorkspace({
   }, [
     conversation.id,
     conversation.supplierId,
+    autoTranslateEnabled,
     supplier?.name,
     supplierMessageLanguage,
   ])
 
   const handleStartNegotiation = useCallback(async () => {
+    if (manualTakeoverActive) return
     if (isConversationComplete) return
     setIsWaitingForAI(true)
     setIsNegotiating(true)
@@ -304,6 +400,7 @@ export function ConversationWorkspace({
         },
         body: JSON.stringify({
           conversation_id: conversation.id,
+          auto_translate_enabled: autoTranslateEnabled,
         }),
       })
 
@@ -330,7 +427,7 @@ export function ConversationWorkspace({
     } finally {
       setIsNegotiating(false)
     }
-  }, [conversation.id, isConversationComplete])
+  }, [autoTranslateEnabled, conversation.id, isConversationComplete, manualTakeoverActive])
 
   useEffect(() => {
     if (!shouldAutoStartNegotiation || autoStartAttemptedRef.current) return
@@ -341,8 +438,6 @@ export function ConversationWorkspace({
   const handleSendSupplierReply = async () => {
     if (!supplierReply.trim()) return
     if (isConversationComplete) return
-
-    setIsWaitingForAI(true)
 
     const optimisticContent = supplierReply.trim()
     const optimisticSignature = ["supplier", optimisticContent, "", ""].join("|")
@@ -364,6 +459,22 @@ export function ConversationWorkspace({
 
     setIsSendingReply(true)
     try {
+      if (manualTakeoverActive) {
+        const result = await sendPausedSupplierReplyAction({
+          conversationId: conversation.id,
+          message: optimisticContent,
+        })
+
+        if (!result.ok) {
+          throw new Error(result.message ?? "Failed to add supplier reply.")
+        }
+
+        setSupplierReply("")
+        router.refresh()
+        return
+      }
+
+      setIsWaitingForAI(true)
       const response = await fetch("http://localhost:8000/api/v1/negotiation/webhook", {
         method: "POST",
         headers: {
@@ -372,6 +483,7 @@ export function ConversationWorkspace({
         body: JSON.stringify({
           conversation_id: conversation.id,
           supplier_message: optimisticContent,
+          auto_translate_enabled: autoTranslateEnabled,
         }),
       })
 
@@ -402,6 +514,7 @@ export function ConversationWorkspace({
 
   const handleSendSupplierFile = useCallback(
     async (file: File | null) => {
+      if (manualTakeoverActive) return
       if (!file || isConversationComplete) return
 
       setIsWaitingForAI(true)
@@ -437,6 +550,7 @@ export function ConversationWorkspace({
             file_url: uploadResult.file_url,
             file_name: uploadResult.file_name,
             file_type: uploadResult.file_type,
+            auto_translate_enabled: autoTranslateEnabled,
           }),
         })
 
@@ -462,7 +576,7 @@ export function ConversationWorkspace({
         setIsSendingReply(false)
       }
     },
-    [conversation.id, isConversationComplete]
+    [autoTranslateEnabled, conversation.id, isConversationComplete, manualTakeoverActive]
   )
 
   const openPreview = useCallback(
@@ -470,20 +584,6 @@ export function ConversationWorkspace({
     []
   )
   const closePreview = useCallback(() => setPreview(null), [])
-
-  const handleFieldHover = useCallback(
-    (field: ExtractionField | null) => {
-      if (!field) {
-        setHighlightedMessageId(null)
-        return
-      }
-      const id = getEvidenceSourceMessageId(liveMessages, field)
-      if (id) {
-        setHighlightedMessageId(id)
-      }
-    },
-    [liveMessages]
-  )
 
   const handleAttachmentClick = useCallback(
     (message: NegotiationMessage) => {
@@ -505,6 +605,207 @@ export function ConversationWorkspace({
     },
     [invoicesById, openPreview]
   )
+
+  const handleSaveTargetPriceRange = useCallback(() => {
+    const min = Number(targetPriceMin)
+    const max = Number(targetPriceMax)
+
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      setPriceRangeMessage("Enter a valid minimum and maximum price.")
+      return
+    }
+
+    if (min < 0 || max < 0) {
+      setPriceRangeMessage("Target prices must be zero or greater.")
+      return
+    }
+
+    if (max < min) {
+      setPriceRangeMessage("Maximum price must be greater than or equal to minimum price.")
+      return
+    }
+
+    setPriceRangeMessage(null)
+    startSavingPriceRange(async () => {
+      const result = await updateConversationTargetPriceRangeAction({
+        conversationId: conversation.id,
+        targetPriceMin: min,
+        targetPriceMax: max,
+      })
+
+      if (!result.ok) {
+        setPriceRangeMessage(result.message ?? "Could not update target price range.")
+        return
+      }
+
+      setDisplayTargetPriceRange(formatTargetPriceRange(min, max))
+      setIsPriceRangeEditing(false)
+      setPriceRangeMessage(result.message ?? "Target price range updated.")
+      router.refresh()
+    })
+  }, [conversation.id, router, targetPriceMax, targetPriceMin])
+
+  const handleStopAi = useCallback(() => {
+    if (manualTakeoverActive || isConversationComplete) return
+
+    setManualMessageError(null)
+    startStoppingAi(async () => {
+      const result = await stopConversationAiAction({
+        conversationId: conversation.id,
+      })
+
+      if (!result.ok) {
+        setManualMessageError(result.message ?? "Could not stop AI.")
+        return
+      }
+
+      setManualTakeoverActive(true)
+      setIsWaitingForAI(false)
+      setIsNegotiating(false)
+      setLiveMessages((prev) => [
+        ...prev,
+        {
+          id: `manual-takeover-${Date.now()}`,
+          conversationId: conversation.id,
+          supplierId: conversation.supplierId,
+          type: "merchant-action",
+          author: "system",
+          sentiment: "neutral",
+          body: "Admin stopped autonomous AI negotiation. Manual takeover is now active.",
+          language: "en",
+          createdAt: new Date().toISOString(),
+        },
+      ])
+      router.refresh()
+    })
+  }, [
+    conversation.id,
+    conversation.supplierId,
+    isConversationComplete,
+    manualTakeoverActive,
+    router,
+  ])
+
+  const handleResumeAi = useCallback(() => {
+    if (!manualTakeoverActive || isConversationComplete) return
+
+    setManualMessageError(null)
+    startResumingAi(async () => {
+      const result = await resumeConversationAiAction({
+        conversationId: conversation.id,
+      })
+
+      if (!result.ok) {
+        setManualMessageError(result.message ?? "Could not resume AI.")
+        return
+      }
+
+      autoStartAttemptedRef.current = true
+      setManualTakeoverActive(false)
+      setIsWaitingForAI(true)
+      setIsNegotiating(true)
+      setLiveMessages((prev) => [
+        ...prev,
+        {
+          id: `ai-resumed-${Date.now()}`,
+          conversationId: conversation.id,
+          supplierId: conversation.supplierId,
+          type: "merchant-action",
+          author: "system",
+          sentiment: "neutral",
+          body: "Admin resumed autonomous AI negotiation. The copilot can continue from the latest context.",
+          language: "en",
+          createdAt: new Date().toISOString(),
+        },
+      ])
+
+      try {
+        const response = await fetch("http://localhost:8000/api/v1/negotiation/resume", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            conversation_id: conversation.id,
+            auto_translate_enabled: autoTranslateEnabled,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "")
+          throw new Error(
+            `Failed to resume negotiation: ${response.status} ${response.statusText}${
+              errorText ? `\n${errorText}` : ""
+            }`
+          )
+        }
+
+        await response.json().catch(() => null)
+        router.refresh()
+      } catch (error) {
+        console.error("Failed to resume negotiation:", error)
+        setManualMessageError("AI was resumed, but could not continue the thread. Check backend logs.")
+        setIsWaitingForAI(false)
+      } finally {
+        setIsNegotiating(false)
+      }
+    })
+  }, [
+    autoTranslateEnabled,
+    conversation.id,
+    conversation.supplierId,
+    isConversationComplete,
+    manualTakeoverActive,
+    router,
+  ])
+
+  const handleSendManualMessage = useCallback(() => {
+    const message = manualMessage.trim()
+    if (!message) {
+      setManualMessageError("Enter a manual message before sending.")
+      return
+    }
+
+    setManualMessageError(null)
+    startSendingManualMessage(async () => {
+      const result = await sendManualConversationMessageAction({
+        conversationId: conversation.id,
+        supplierId: conversation.supplierId,
+        message,
+        autoTranslateEnabled,
+        languageCode: supplierMessageLanguage,
+      })
+
+      if (!result.ok) {
+        setManualMessageError(result.message ?? "Could not send manual message.")
+        return
+      }
+
+      setLiveMessages((prev) => [
+        ...prev,
+        {
+          id: `manual-admin-${Date.now()}`,
+          conversationId: conversation.id,
+          supplierId: conversation.supplierId,
+          type: "merchant-action",
+          author: "merchant",
+          sentiment: "neutral",
+          body: message,
+          language: autoTranslateEnabled ? supplierMessageLanguage : "en",
+          createdAt: new Date().toISOString(),
+        },
+      ])
+      setManualMessage("")
+      router.refresh()
+    })
+  }, [
+    autoTranslateEnabled,
+    conversation.id,
+    conversation.supplierId,
+    manualMessage,
+    router,
+    supplierMessageLanguage,
+  ])
 
   return (
     <>
@@ -529,10 +830,101 @@ export function ConversationWorkspace({
                 label="Source Type"
                 value={displayConversationSource(conversation.source)}
               />
-              <InfoRow
-                label="Target Price Range"
-                value={conversation.targetPriceRange}
-              />
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[13px] text-[#9CA3AF]">
+                    Target Price Range
+                  </p>
+                  {!isPriceRangeEditing ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const parsed = parseTargetPriceRange(displayTargetPriceRange)
+                        setTargetPriceMin(parsed.min)
+                        setTargetPriceMax(parsed.max)
+                        setPriceRangeMessage(null)
+                        setIsPriceRangeEditing(true)
+                      }}
+                      className="h-7 rounded-[8px] border-[#243047] bg-[#172033] px-2 text-[12px] text-[#E5E7EB] hover:bg-[#243047]"
+                    >
+                      <Pencil className="size-3" aria-hidden="true" />
+                      Edit
+                    </Button>
+                  ) : null}
+                </div>
+
+                {isPriceRangeEditing ? (
+                  <div className="mt-2 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={targetPriceMin}
+                        onChange={(event) => setTargetPriceMin(event.target.value)}
+                        placeholder="Min"
+                        className="h-9 rounded-[9px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB]"
+                        aria-label="Minimum target price"
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={targetPriceMax}
+                        onChange={(event) => setTargetPriceMax(event.target.value)}
+                        placeholder="Max"
+                        className="h-9 rounded-[9px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB]"
+                        aria-label="Maximum target price"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        onClick={handleSaveTargetPriceRange}
+                        disabled={isSavingPriceRange}
+                        className="h-8 rounded-[9px] bg-[#3B82F6] px-2.5 text-[12px] text-white hover:bg-[#2563EB]"
+                      >
+                        <Check className="size-3.5" aria-hidden="true" />
+                        {isSavingPriceRange ? "Saving..." : "Save"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          const parsed = parseTargetPriceRange(displayTargetPriceRange)
+                          setTargetPriceMin(parsed.min)
+                          setTargetPriceMax(parsed.max)
+                          setPriceRangeMessage(null)
+                          setIsPriceRangeEditing(false)
+                        }}
+                        disabled={isSavingPriceRange}
+                        className="h-8 rounded-[9px] border-[#243047] bg-[#172033] px-2.5 text-[12px] text-[#E5E7EB] hover:bg-[#243047]"
+                      >
+                        <X className="size-3.5" aria-hidden="true" />
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-[15px] leading-6 text-[#E5E7EB]">
+                    {displayTargetPriceRange}
+                  </p>
+                )}
+
+                {priceRangeMessage ? (
+                  <p
+                    className={cn(
+                      "mt-2 text-[12px]",
+                      /updated/i.test(priceRangeMessage)
+                        ? "text-[#86EFAC]"
+                        : "text-[#FCA5A5]"
+                    )}
+                  >
+                    {priceRangeMessage}
+                  </p>
+                ) : null}
+              </div>
               <InfoRow
                 label="Created Date"
                 value={conversation.createdDate}
@@ -617,7 +1009,9 @@ export function ConversationWorkspace({
                     Negotiation Thread
                   </CardTitle>
                   <p className="mt-1 text-[13px] text-[#9CA3AF]">
-                    Z.AI negotiating autonomously with {supplier?.name}
+                    {manualTakeoverActive
+                      ? `Admin manual takeover with ${supplier?.name}`
+                      : `AI negotiating autonomously with ${supplier?.name}`}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -625,6 +1019,8 @@ export function ConversationWorkspace({
                     label={
                       isConversationComplete
                         ? "Negotiation Complete"
+                        : manualTakeoverActive
+                          ? "Manual Takeover"
                         : isNegotiating || isWaitingForAI
                           ? "Negotiation Active"
                           : conversation.negotiationState
@@ -632,6 +1028,8 @@ export function ConversationWorkspace({
                     tone={
                       isConversationComplete
                         ? "success"
+                        : manualTakeoverActive
+                          ? "danger"
                         : isNegotiating || isWaitingForAI
                           ? "ai"
                           : stateTone[conversation.negotiationState]
@@ -645,6 +1043,28 @@ export function ConversationWorkspace({
                   ) : null}
                   {conversation.linkedInvoiceId ? (
                     <StatusBadge label="Invoice Received" tone="warning" />
+                  ) : null}
+                  {manualTakeoverActive && !isConversationComplete ? (
+                    <Button
+                      type="button"
+                      onClick={handleResumeAi}
+                      disabled={isResumingAi}
+                      className="h-8 rounded-[10px] bg-[#3B82F6] px-3 text-[12px] text-white hover:bg-[#2563EB]"
+                    >
+                      <Play className="size-3.5" aria-hidden="true" />
+                      {isResumingAi ? "Resuming..." : "Resume AI"}
+                    </Button>
+                  ) : null}
+                  {!manualTakeoverActive && !isConversationComplete ? (
+                    <Button
+                      type="button"
+                      onClick={handleStopAi}
+                      disabled={isStoppingAi}
+                      className="h-8 rounded-[10px] bg-[#EF4444] px-3 text-[12px] text-white hover:bg-[#DC2626]"
+                    >
+                      <CircleStop className="size-3.5" aria-hidden="true" />
+                      {isStoppingAi ? "Stopping..." : "Stop AI"}
+                    </Button>
                   ) : null}
                 </div>
               </div>
@@ -663,11 +1083,32 @@ export function ConversationWorkspace({
                       <span className="font-semibold text-[#C4B5FD]">
                         {supplierPreferredLanguageLabel}
                       </span>
-                      . Z.AI is auto-translating and replying in the same
-                      language.
+                      . AI will reply in{" "}
+                      {autoTranslateEnabled ? "that language" : "English"}.
                     </span>
                   </div>
-                  <StatusBadge label="Auto-translate ON" tone="ai" />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAutoTranslateEnabled((current) => !current)
+                    }
+                    className={cn(
+                      "flex h-8 items-center gap-2 rounded-[10px] border px-3 text-[12px] font-medium transition-colors",
+                      autoTranslateEnabled
+                        ? "border-[#8B5CF6]/45 bg-[#8B5CF6]/15 text-[#C4B5FD] hover:bg-[#8B5CF6]/20"
+                        : "border-[#243047] bg-[#111827] text-[#9CA3AF] hover:bg-[#172033]"
+                    )}
+                    aria-pressed={autoTranslateEnabled}
+                  >
+                    <span
+                      className={cn(
+                        "size-2 rounded-full",
+                        autoTranslateEnabled ? "bg-[#8B5CF6]" : "bg-[#6B7280]"
+                      )}
+                      aria-hidden="true"
+                    />
+                    Auto-translate {autoTranslateEnabled ? "ON" : "OFF"}
+                  </button>
                 </div>
               ) : null}
 
@@ -679,9 +1120,12 @@ export function ConversationWorkspace({
                   return (
                     <MessageBubble
                       key={message.id}
-                      message={message}
+                      message={{
+                        ...message,
+                        translation:
+                          messageTranslations[message.id] ?? message.translation,
+                      }}
                       invoice={invoice}
-                      isHighlighted={highlightedMessageId === message.id}
                       isPulsing={pulseMessageId === message.id}
                       inlinePdfExpanded={Boolean(pdfInlineOpen[message.id])}
                       onAttachmentClick={() => handleAttachmentClick(message)}
@@ -700,30 +1144,107 @@ export function ConversationWorkspace({
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Supplier Reply Section */}
+              {manualTakeoverActive ? (
+                <div className="shrink-0 border-t border-[#243047] bg-[#0B1020] p-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-medium text-[#E5E7EB]">
+                        Admin Manual Message
+                      </span>
+                      <StatusBadge label="AI Stopped" tone="danger" />
+                      {supplierPreferredLanguage !== "en" ? (
+                        <StatusBadge
+                          label={
+                            autoTranslateEnabled
+                              ? `Translation ON · ${supplierPreferredLanguageLabel}`
+                              : "Translation OFF"
+                          }
+                          tone={autoTranslateEnabled ? "ai" : "default"}
+                        />
+                      ) : null}
+                    </div>
+                    <span className="text-[12px] text-[#9CA3AF]">
+                      Autonomous negotiation is paused.
+                    </span>
+                  </div>
+                  <div className="flex gap-3">
+                    <textarea
+                      value={manualMessage}
+                      onChange={(event) => setManualMessage(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                          event.preventDefault()
+                          handleSendManualMessage()
+                        }
+                      }}
+                      placeholder="Type the admin message to send to the supplier..."
+                      className="min-h-[76px] flex-1 resize-none rounded-[10px] border border-[#243047] bg-[#172033] px-3 py-2 text-[14px] leading-6 text-[#E5E7EB] outline-none placeholder:text-[#6B7280] focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20"
+                      disabled={isSendingManualMessage || isConversationComplete}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleSendManualMessage}
+                      disabled={
+                        isSendingManualMessage ||
+                        isConversationComplete ||
+                        !manualMessage.trim()
+                      }
+                      className="h-[76px] rounded-[10px] bg-[#3B82F6] px-4 text-[13px] text-white hover:bg-[#2563EB] disabled:opacity-50"
+                    >
+                      <Send className="size-4" aria-hidden="true" />
+                      {isSendingManualMessage ? "Sending..." : "Send"}
+                    </Button>
+                  </div>
+                  {manualMessageError ? (
+                    <p className="mt-2 text-[12px] text-[#FCA5A5]">
+                      {manualMessageError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="shrink-0 border-t border-[#243047] bg-[#0B1020] p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-[13px] font-medium text-[#9CA3AF]">Test Supplier Reply</span>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span className="text-[13px] font-medium text-[#9CA3AF]">
+                    Test Supplier Reply
+                  </span>
                   <StatusBadge label="Development Mode" tone="warning" />
+                  {manualTakeoverActive ? (
+                    <StatusBadge label="AI Paused" tone="danger" />
+                  ) : null}
                 </div>
                 <div className="flex gap-3">
                   <input
                     type="text"
                     value={supplierReply}
                     onChange={(e) => setSupplierReply(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendSupplierReply()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        void handleSendSupplierReply()
+                      }
+                    }}
                     placeholder="Enter supplier's counter-offer or response..."
                     className="flex-1 rounded-[10px] border border-[#243047] bg-[#172033] px-3 py-2 text-[14px] text-[#E5E7EB] outline-none placeholder:text-[#6B7280] focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20"
                     disabled={isSendingReply || isConversationComplete}
                   />
                   <Button
-                    onClick={handleSendSupplierReply}
-                    disabled={isSendingReply || isConversationComplete || !supplierReply.trim()}
+                    onClick={() => void handleSendSupplierReply()}
+                    disabled={
+                      isSendingReply ||
+                      isConversationComplete ||
+                      !supplierReply.trim()
+                    }
                     className="h-9 rounded-[10px] bg-[#3B82F6] px-4 text-[13px] text-white hover:bg-[#2563EB] disabled:opacity-50"
                   >
                     {isSendingReply ? "Sending..." : "Send Reply"}
                   </Button>
                 </div>
+                {manualTakeoverActive ? (
+                  <p className="mt-2 text-[12px] text-[#9CA3AF]">
+                    Supplier replies are added to the thread without triggering an AI response.
+                  </p>
+                ) : null}
               </div>
 
               <div className="shrink-0 border-t border-[#243047] bg-[#0B1020] p-4">
@@ -754,7 +1275,11 @@ export function ConversationWorkspace({
                     <Button
                       variant="outline"
                       onClick={() => imageUploadInputRef.current?.click()}
-                      disabled={isSendingReply || isConversationComplete}
+                      disabled={
+                        isSendingReply ||
+                        isConversationComplete ||
+                        manualTakeoverActive
+                      }
                       className="h-9 rounded-[10px] border-[#243047] bg-[#172033] text-[#E5E7EB] hover:bg-[#243047]"
                     >
                       <ImageIcon className="size-4" aria-hidden="true" />
@@ -763,7 +1288,11 @@ export function ConversationWorkspace({
                     <Button
                       variant="outline"
                       onClick={() => pdfUploadInputRef.current?.click()}
-                      disabled={isSendingReply || isConversationComplete}
+                      disabled={
+                        isSendingReply ||
+                        isConversationComplete ||
+                        manualTakeoverActive
+                      }
                       className="h-9 rounded-[10px] border-[#243047] bg-[#172033] text-[#E5E7EB] hover:bg-[#243047]"
                     >
                       <FileText className="size-4" aria-hidden="true" />
@@ -795,49 +1324,15 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function HoverableField({
-  label,
-  value,
-  onHover,
-  onLeave,
-}: {
-  label: string
-  value: string
-  onHover: () => void
-  onLeave: () => void
-}) {
-  return (
-    <div
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
-      onFocus={onHover}
-      onBlur={onLeave}
-      tabIndex={0}
-      className="group -m-2 rounded-[10px] p-2 outline-none transition-colors hover:bg-[#172033]/60 focus-visible:bg-[#172033]/60 focus-visible:ring-1 focus-visible:ring-[#8B5CF6]/40"
-    >
-      <p className="flex items-center gap-1.5 text-[13px] text-[#9CA3AF]">
-        {label}
-        <span
-          aria-hidden="true"
-          className="hidden size-1 rounded-full bg-[#8B5CF6] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 sm:inline-block"
-        />
-      </p>
-      <p className="mt-1 text-[15px] leading-6 text-[#E5E7EB]">{value}</p>
-    </div>
-  )
-}
-
 function MessageBubble({
   message,
   invoice,
-  isHighlighted,
   isPulsing,
   inlinePdfExpanded,
   onAttachmentClick,
 }: {
   message: NegotiationMessage
   invoice?: Invoice
-  isHighlighted: boolean
   isPulsing: boolean
   inlinePdfExpanded: boolean
   onAttachmentClick: () => void
@@ -845,6 +1340,7 @@ function MessageBubble({
   const isSupplier = message.type === "supplier-message"
   const isMerchant = message.type === "merchant-action"
   const { thinking, visible } = splitThinking(message.body)
+  const isHighlighted = false
 
   return (
     <motion.div
@@ -885,9 +1381,9 @@ function MessageBubble({
               label={message.type.replace(/-/g, " ")}
               tone={messageTone[message.type]}
             />
-            {message.language && message.language !== "EN" ? (
+            {message.language && message.language !== "en" ? (
               <StatusBadge
-                label={languageLabel[message.language].short}
+                label={getMessageLanguageBadge(message.language).short}
                 tone="ai"
                 className="gap-1"
               />
@@ -904,13 +1400,7 @@ function MessageBubble({
           <p
             className="text-[15px] leading-6 text-[#E5E7EB]"
             lang={
-              message.language === "MS"
-                ? "ms"
-                : message.language === "ZH"
-                ? "zh"
-                : message.language === "JA"
-                  ? "ja"
-                  : undefined
+              message.language ? message.language : undefined
             }
           >
             {visible}
@@ -928,12 +1418,8 @@ function MessageBubble({
           </details>
         ) : null}
         {message.translation ? (
-          <div className="mt-3 rounded-[10px] border border-dashed border-[#8B5CF6]/30 bg-[#8B5CF6]/5 p-3">
-            <div className="mb-1 flex items-center gap-1.5 text-[13px] font-medium uppercase tracking-wider text-[#C4B5FD]">
-              <Languages className="size-3" aria-hidden="true" />
-              Z.AI translation · EN
-            </div>
-            <p className="text-[13px] leading-5 text-[#9CA3AF]">
+          <div className="mt-3 border-t border-[#475569] pt-3">
+            <p className="text-[14px] leading-6 text-[#CBD5E1]" lang="en">
               {message.translation}
             </p>
           </div>
@@ -1020,12 +1506,19 @@ function SupplierInvoiceFrame({
       >
         <div
           className={cn(
-            "flex size-12 shrink-0 items-center justify-center rounded-[10px] overflow-hidden bg-[#172033]",
+            "relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-[#172033]",
             !fileUrl && "bg-[#F59E0B]/10 text-[#FBBF24]"
           )}
         >
           {fileUrl && isImage ? (
-            <img src={fileUrl} alt="Thumbnail" className="w-full h-full object-cover" />
+            <Image
+              src={fileUrl}
+              alt="Thumbnail"
+              fill
+              sizes="48px"
+              className="object-cover"
+              unoptimized
+            />
           ) : (
             <AttachmentIcon className="size-5" aria-hidden="true" />
           )}
@@ -1054,7 +1547,7 @@ function SupplierInvoiceFrame({
 
       <div className="px-4 py-3">
         <p className="text-[13px] font-medium uppercase tracking-wider text-[#9CA3AF]">
-          Z.AI risk signal
+          AI risk signal
         </p>
         <p className="mt-1 text-[13px] leading-5 text-[#E5E7EB]">
           {invoice.riskReason}
@@ -1155,7 +1648,7 @@ function AttachmentPreview({
         <div className="flex shrink-0 items-center gap-1.5">
           {isPoPdf ? <StatusBadge label="Order List PDF" tone="ai" /> : null}
           {showParsedBadge ? (
-            <StatusBadge label="Parsed by Z.AI" tone="success" />
+            <StatusBadge label="Parsed by AI" tone="success" />
           ) : null}
           <span className="flex items-center gap-1 text-[13px] font-medium text-[#93C5FD]">
             {type === "image" || type === "screenshot" ? (
@@ -1175,7 +1668,14 @@ function AttachmentPreview({
           aria-label={`Preview ${label}`}
         >
           {fileUrl && (
-             <img src={fileUrl} alt={label} className="w-full h-full object-cover" />
+            <Image
+              src={fileUrl}
+              alt={label}
+              fill
+              sizes="100vw"
+              className="object-cover"
+              unoptimized
+            />
           )}
         </button>
       ) : null}
@@ -1406,7 +1906,7 @@ function EvidenceMetaCard({ message }: { message: NegotiationMessage }) {
       {message.translation ? (
         <div className="mt-3 rounded-[10px] border border-dashed border-[#8B5CF6]/30 bg-[#8B5CF6]/5 p-3">
           <p className="text-[13px] font-medium uppercase tracking-wider text-[#C4B5FD]">
-            Z.AI translation
+            AI translation
           </p>
           <p className="mt-1 text-[13px] leading-5 text-[#9CA3AF]">
             {message.translation}
@@ -1424,7 +1924,14 @@ function ImagePreviewBody({ message }: { message: NegotiationMessage }) {
     <div className="rounded-[12px] border border-[#243047] bg-[#0F1728] p-4">
       <div className="relative aspect-[4/3] overflow-hidden rounded-[10px] border border-[#243047] bg-[linear-gradient(135deg,#172033,#111827_40%,#243047_80%,#1F2A44)] flex items-center justify-center">
         {fileUrl ? (
-           <img src={fileUrl} alt={message.attachmentLabel || "Preview"} className="w-full h-full object-contain bg-black/40" />
+          <Image
+            src={fileUrl}
+            alt={message.attachmentLabel || "Preview"}
+            fill
+            sizes="(max-width: 768px) 100vw, 560px"
+            className="object-contain bg-black/40"
+            unoptimized
+          />
         ) : (
           <div className="absolute inset-x-6 bottom-5 flex flex-col gap-2">
             <span className="h-3 w-2/3 rounded bg-[#334155]/60" />

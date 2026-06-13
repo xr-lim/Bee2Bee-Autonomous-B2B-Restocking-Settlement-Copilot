@@ -57,7 +57,7 @@ export function ThresholdChangeRequestList({
   requests,
   products,
   title = "Threshold Change Requests",
-  description = "Z.AI threshold updates awaiting approval.",
+  description = "AI threshold updates awaiting approval.",
   maxVisible,
   emptyLabel = "No pending threshold changes.",
   defaultOpen = false,
@@ -256,7 +256,7 @@ export function ThresholdChangeBanner({
                 ) : null}
               </div>
               <p className="mt-2 text-[15px] leading-6 text-[#E5E7EB]">
-                Z.AI suggests moving the current threshold from{" "}
+                AI suggests moving the current threshold from{" "}
                 <span className="font-semibold">
                   {request.currentThreshold}
                 </span>{" "}

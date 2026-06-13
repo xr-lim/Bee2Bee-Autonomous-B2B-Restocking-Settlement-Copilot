@@ -81,7 +81,7 @@ export function AiReasoningTrail({
   confidence,
   decision,
   prompt = "Why did AI decide this?",
-  emptyHint = "Z.AI did not record any input signals for this decision.",
+  emptyHint = "AI did not record any input signals for this decision.",
   density = "cozy",
   defaultOpen = false,
   className,

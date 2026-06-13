@@ -132,10 +132,6 @@ export function RestockForm({
       ? WORKFLOW_STATE_TO_STEP_INDEX.waiting_supplier
       : undefined
 
-  const automationPlan = useMemo(() => recommendation.automationPlan, [
-    recommendation.automationPlan,
-  ])
-
   useEffect(() => {
     if (animatedActiveStep == null) return
 
@@ -205,9 +201,20 @@ export function RestockForm({
     const result = await startRestockWorkflowAction({
       productId: product.id,
       sku: product.sku,
+      supplierId: draft.supplierId,
+      targetPrice: draft.targetPrice,
+      quantity: draft.quantity,
+      reason: draft.reason,
     })
 
     if (result.ok) {
+      const nextCommitted = {
+        ...draft,
+        estimatedSpend: deriveEstimatedSpend(draft.targetPrice, draft.quantity),
+      }
+      setCommitted(nextCommitted)
+      setDraft(nextCommitted)
+      setIsEditing(false)
       setOptimisticWorkflowState("po_sent")
       setAnimatedActiveStep(0)
     } else {
@@ -308,7 +315,7 @@ export function RestockForm({
                 Restock order for {recommendation.productName}
               </CardTitle>
               <p className="mt-1 text-[12px] text-[#9CA3AF]">
-                Review stock context and adjust terms before Z.AI starts the
+                Review stock context and adjust terms before AI starts the
                 autonomous negotiation.
               </p>
             </div>
@@ -475,7 +482,7 @@ export function RestockForm({
                 <Button
                   type="button"
                   onClick={handleSave}
-                  disabled={isSavingRequest}
+                  disabled={isSavingRequest || isStartingWorkflow}
                   className="h-9 rounded-[10px] bg-[#3B82F6] px-4 text-white hover:bg-[#2563EB]"
                 >
                   {isSavingRequest ? (
@@ -484,6 +491,22 @@ export function RestockForm({
                     <Save className="size-4" aria-hidden="true" />
                   )}
                   Save changes
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleStartRestock}
+                  disabled={workflowStarted || isStartingWorkflow || isSavingRequest}
+                  className="h-10 rounded-[10px] bg-[#3B82F6] px-4 text-white hover:bg-[#2563EB] disabled:cursor-not-allowed disabled:bg-[#3B82F6]/60"
+                >
+                  {isStartingWorkflow ? (
+                    <Loader2
+                      className="size-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Bot className="size-4" aria-hidden="true" />
+                  )}
+                  {buttonLabel}
                 </Button>
               </>
             ) : (

@@ -144,7 +144,7 @@ export function ConversationsBrowser({
     {
       title: "On Progress",
       description:
-        "Z.AI is actively negotiating or waiting on supplier response.",
+        "AI is actively negotiating or waiting on supplier response.",
       tone: "ai" as StatusTone,
       match: (conversation: Conversation) =>
         ["Counter Offer Suggested", "Waiting Reply", "New Input"].includes(

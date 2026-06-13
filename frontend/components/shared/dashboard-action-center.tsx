@@ -158,7 +158,7 @@ function RestockList({
               Expand only when you want to review product-level action details.
             </p>
           </div>
-          <StatusBadge label="Z.AI ready" tone="ai" />
+          <StatusBadge label="AI ready" tone="ai" />
         </div>
         <div className="grid gap-3">
           {restockRecommendations.map((item) => (
