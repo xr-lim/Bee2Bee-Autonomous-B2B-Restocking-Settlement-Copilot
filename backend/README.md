@@ -65,3 +65,9 @@ Useful endpoints:
 
 - `GET /api/v1/ai/status`
 - `POST /api/v1/ai/copilot`
+
+## Telegram Bot
+
+Telegram supplier messaging setup is documented in:
+
+- `backend/TELEGRAM_SETUP.md`

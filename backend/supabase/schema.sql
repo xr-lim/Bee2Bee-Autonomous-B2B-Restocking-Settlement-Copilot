@@ -39,6 +39,7 @@ create table public.suppliers (
   id text primary key,
   name text not null,
   region text not null,
+  telegram_chat_id text,
   preferred_language varchar(10) not null default 'en' check (
     preferred_language in ('en', 'ms', 'zh')
   ),
@@ -393,6 +394,9 @@ create index idx_product_suppliers_product_id
   on public.product_suppliers (product_id);
 create index idx_product_suppliers_supplier_id
   on public.product_suppliers (supplier_id);
+create unique index suppliers_telegram_chat_id_idx
+  on public.suppliers (telegram_chat_id)
+  where telegram_chat_id is not null;
 create index idx_threshold_change_requests_product_id
   on public.threshold_change_requests (product_id);
 create index idx_conversations_supplier_id
