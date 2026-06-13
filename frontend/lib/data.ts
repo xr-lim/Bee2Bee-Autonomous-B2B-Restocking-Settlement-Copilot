@@ -17,6 +17,10 @@ import {
   getMessageLanguageCode,
   normalizeSupplierPreferredLanguage,
 } from "@/lib/supplier-language"
+import {
+  buildInvoiceValidationSummary,
+  isResolvedInvoiceCheck,
+} from "@/lib/invoice-validation"
 
 type DashboardKpi = {
   title: string
@@ -128,6 +132,7 @@ type RawSupplier = {
   id: string
   name: string
   region: string
+  telegramChatId?: string | null
   leadTimeDays: number
   reliabilityScore: number
   status?: Supplier["status"]
@@ -213,6 +218,7 @@ type RawConversationMessage = {
   senderType: "merchant" | "supplier" | "ai" | "system"
   messageType: string
   content: string
+  translatedContent?: string | null
   attachmentUrl?: string | null
   extractedPrice?: number | null
   extractedQuantity?: number | null
@@ -560,131 +566,6 @@ function formatCurrencyLabel(
   })}`
 }
 
-function humanizeCheckName(checkName: string) {
-  return checkName
-    .replace(/^ai_/, "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
-}
-
-function normalizeComparableText(value?: string | null) {
-  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ")
-}
-
-function amountMatchesExpectedRange(
-  amount: number,
-  expectedAmountMin: number | null,
-  expectedAmountMax: number | null,
-  fallbackAmount: number
-) {
-  if (expectedAmountMin != null && expectedAmountMax != null) {
-    return amount >= expectedAmountMin - 0.005 && amount <= expectedAmountMax + 0.005
-  }
-
-  return Math.abs(amount - fallbackAmount) < 0.005
-}
-
-function isResolvedAiCheck(
-  check: RawInvoiceValidationResult,
-  context: {
-    amount: number
-    negotiatedAmount: number
-    expectedAmountMin: number | null
-    expectedAmountMax: number | null
-    expectedQuantity: number
-    invoiceQuantity: number
-    currentCurrency: string
-    expectedCurrency: string
-    currentSupplierName: string
-    expectedSupplierName: string
-    bankDetails: string
-    paymentTerms: string
-    invoiceNumber: string
-    lineItemCount: number
-  }
-) {
-  const checkName = check.checkName.toLowerCase()
-  const actualValue = normalizeComparableText(check.actualValue)
-
-  if (checkName === "ai_amount_mismatch" || checkName === "amount_mismatch") {
-    return amountMatchesExpectedRange(
-      context.amount,
-      context.expectedAmountMin,
-      context.expectedAmountMax,
-      context.negotiatedAmount
-    )
-  }
-
-  if (checkName === "ai_quantity_mismatch" || checkName === "quantity_mismatch" || checkName === "ai_missing_quantity" || checkName === "missing_quantity") {
-    return (
-      context.invoiceQuantity > 0 &&
-      context.expectedQuantity > 0 &&
-      context.invoiceQuantity === context.expectedQuantity
-    )
-  }
-
-  if (checkName === "ai_missing_supplier" || checkName === "missing_supplier" || checkName === "ai_supplier_mismatch" || checkName === "supplier_mismatch") {
-    return (
-      normalizeComparableText(context.currentSupplierName) !== "" &&
-      normalizeComparableText(context.currentSupplierName) ===
-        normalizeComparableText(context.expectedSupplierName)
-    )
-  }
-
-  if (checkName === "ai_missing_payment_terms" || checkName === "missing_payment_terms") {
-    return normalizeComparableText(context.paymentTerms) !== "not provided"
-  }
-
-  if (checkName === "ai_missing_bank_details" || checkName === "missing_bank_details" || checkName === "ai_bank_mismatch" || checkName === "bank_mismatch") {
-    return normalizeComparableText(context.bankDetails) !== "not provided"
-  }
-
-  if ((checkName === "ai_missing_field" || checkName === "missing_field") && actualValue.includes("line item")) {
-    return context.lineItemCount > 0
-  }
-
-  if ((checkName === "ai_missing_field" || checkName === "missing_field") && actualValue.includes("quantity is 0")) {
-    return (
-      context.invoiceQuantity > 0 &&
-      context.expectedQuantity > 0 &&
-      context.invoiceQuantity === context.expectedQuantity
-    )
-  }
-
-  if ((checkName === "ai_missing_field" || checkName === "missing_field") && actualValue.includes("currency")) {
-    return normalizeComparableText(context.currentCurrency) !== "" && normalizeComparableText(context.currentCurrency) !== "null"
-  }
-
-  if ((checkName === "ai_suspicious_value" || checkName === "suspicious_value") && actualValue.includes("currency mismatch")) {
-    return (
-      normalizeComparableText(context.currentCurrency) ===
-      normalizeComparableText(context.expectedCurrency)
-    )
-  }
-
-  if ((checkName === "ai_suspicious_value" || checkName === "suspicious_value") && (actualValue.includes("amount") || actualValue.includes("price") || actualValue.includes("total"))) {
-    return (
-      context.amount > 0 &&
-      amountMatchesExpectedRange(
-        context.amount,
-        context.expectedAmountMin,
-        context.expectedAmountMax,
-        context.negotiatedAmount
-      )
-    )
-  }
-
-  if ((checkName === "ai_suspicious_value" || checkName === "suspicious_value") && actualValue.includes("quantity")) {
-    return context.invoiceQuantity > 0 && context.invoiceQuantity === context.expectedQuantity
-  }
-
-  if (checkName.startsWith("ai_other_") && actualValue.includes("invoice number mismatch")) {
-    return !context.invoiceNumber.toUpperCase().startsWith("UPL-")
-  }
-
-  return false
-}
-
 function displaySourceType(sourceType: string): Invoice["sourceType"] {
   const sourceMap: Record<string, Invoice["sourceType"]> = {
     pdf: "PDF",
@@ -831,6 +712,7 @@ function mapSuppliers(suppliers: RawSupplier[]): Supplier[] {
     id: supplier.id,
     name: supplier.name,
     region: supplier.region,
+    telegramChatId: supplier.telegramChatId ?? null,
     reliabilityScore: Number(supplier.reliabilityScore),
     leadTimeDays: supplier.leadTimeDays,
     status:
@@ -1254,6 +1136,10 @@ function mapMessages(
   return rows.conversationMessages.map((message) => {
     const type = messageType(message)
     const attachment = attachmentType(message.messageType)
+    const linkedInvoiceId =
+      conversationsById.get(message.conversationId)?.linkedInvoiceId ?? undefined
+    const invoiceAttachment =
+      (attachment === "pdf" || attachment === "image") && Boolean(message.attachmentUrl)
     const supplierId =
       conversationsById.get(message.conversationId)?.supplierId ?? ""
     const supplier = supplierId ? supplierById.get(supplierId) : undefined
@@ -1265,6 +1151,7 @@ function mapMessages(
       type,
       author: message.senderType,
       body: message.content,
+      translation: message.translatedContent?.trim() || undefined,
       sentiment:
         (message.missingFields?.length ?? 0) > 0
           ? "risk"
@@ -1276,7 +1163,8 @@ function mapMessages(
       attachmentLabel: attachment
         ? fileNameFromUrl(message.attachmentUrl) || `${attachment} attachment`
         : undefined,
-      invoiceId: conversationsById.get(message.conversationId)?.linkedInvoiceId ?? undefined,
+      invoiceId: invoiceAttachment ? linkedInvoiceId : undefined,
+      file_url: message.attachmentUrl ?? null,
       language:
         message.senderType === "supplier" || message.senderType === "ai"
           ? getMessageLanguageCode(supplier?.preferredLanguage)
@@ -1387,7 +1275,7 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
       ((submittedOrder || workflow) ? currentSupplierName : "N/A (No PO)")
     const unresolvedChecks = nonPassingChecks.filter(
       (check) =>
-        !isResolvedAiCheck(check, {
+        !isResolvedInvoiceCheck(check, {
           amount: Number(invoice.amount),
           negotiatedAmount,
           expectedAmountMin,
@@ -1441,13 +1329,32 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
         /supplier/i.test(check.checkName) ||
         (/missing_field/i.test(check.checkName) && /supplier/i.test(check.actualValue ?? ""))
       )
-    const riskReason =
-      invoice.aiSummary ??
-      unresolvedChecks[0]?.actualValue ??
-      actions.at(-1)?.note ??
-      "All available invoice checks passed."
-    const issueSummaries = unresolvedChecks.map((check) =>
-      check.actualValue?.trim() || humanizeCheckName(check.checkName)
+    const summaryDetails = buildInvoiceValidationSummary(unresolvedChecks, {
+      fallbackOnly:
+        !invoice.aiLastAnalyzedAt &&
+        (invoice.aiSummary ?? "").toLowerCase().startsWith("fallback validation only:"),
+    })
+    const riskReason = summaryDetails.riskReason
+    const issueSummaries = summaryDetails.issueSummaries
+
+    console.info(
+      "[Invoice UI] risk summary source",
+      JSON.stringify({
+        invoiceId: invoice.id,
+        validationChecksUsed: activeChecks.map((check) => ({
+          checkName: check.checkName,
+          result: check.result,
+          actualValue: check.actualValue ?? null,
+        })),
+        unresolvedChecks: unresolvedChecks.map((check) => ({
+          checkName: check.checkName,
+          result: check.result,
+          actualValue: check.actualValue ?? null,
+        })),
+        riskSummarySource: summaryDetails.riskSummarySource,
+        finalValidationStatus: validationStatus,
+        finalRiskLevel: riskLevel,
+      })
     )
 
     return {
@@ -1516,11 +1423,7 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
         missingFields,
         supplierInconsistency,
       },
-      mismatches: unresolvedChecks.map((check) =>
-        [check.checkName.replace(/_/g, " "), check.actualValue]
-          .filter(Boolean)
-          .join(": ")
-      ),
+      mismatches: summaryDetails.mismatches,
       history: actions.map((action) => ({
         timestamp: action.createdAt ?? "",
         title: action.actionType.replace(/_/g, " "),

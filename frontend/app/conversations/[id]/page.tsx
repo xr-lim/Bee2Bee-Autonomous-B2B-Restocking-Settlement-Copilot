@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import {
   getConversations,
   getInvoices,
+  getNegotiationMessages,
   getProducts,
   getSuppliers,
 } from "@/lib/data"
@@ -27,11 +28,12 @@ export default async function ConversationDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const [conversations, invoices, products, suppliers] = await Promise.all([
+  const [conversations, invoices, products, suppliers, negotiationMessages] = await Promise.all([
     getConversations(),
     getInvoices(),
     getProducts(),
     getSuppliers(),
+    getNegotiationMessages(),
   ])
 
   const conversation = conversations.find((item) => item.id === id)
@@ -53,6 +55,9 @@ export default async function ConversationDetailPage({
     invoices.find((invoice) => invoice.workflowId === conversation.workflowId)
   const invoicesById: Record<string, Invoice> = Object.fromEntries(
     invoices.map((invoice) => [invoice.id, invoice])
+  )
+  const initialMessages = negotiationMessages.filter(
+    (message) => message.conversationId === conversation.id
   )
   const priorityReasons =
     conversation.priority === "critical" || conversation.priority === "high"
@@ -91,6 +96,7 @@ export default async function ConversationDetailPage({
         supplier={supplier}
         linkedProducts={linkedProducts}
         invoicesById={invoicesById}
+        initialMessages={initialMessages}
       />
     </>
   )

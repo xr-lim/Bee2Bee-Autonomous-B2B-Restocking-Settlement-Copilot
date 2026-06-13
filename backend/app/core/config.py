@@ -35,3 +35,14 @@ CURRENT_AI_MODEL = GEMINI_MODEL if AI_PROVIDER == "gemini" else ANTHROPIC_MODEL
 AI_MAX_TOKENS = int(_env("AI_MAX_TOKENS", "1200"))
 AI_TEMPERATURE = float(_env("AI_TEMPERATURE", "0.2"))
 AI_TIMEOUT_SECONDS = float(_env("AI_TIMEOUT_SECONDS", "60"))
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = _env(name, "true" if default else "false").lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+TELEGRAM_ENABLED = _env_bool("TELEGRAM_ENABLED", False)
+TELEGRAM_BOT_TOKEN = _env("TELEGRAM_BOT_TOKEN")
+TELEGRAM_WEBHOOK_SECRET = _env("TELEGRAM_WEBHOOK_SECRET")
+TELEGRAM_API_BASE_URL = _env("TELEGRAM_API_BASE_URL", "https://api.telegram.org")

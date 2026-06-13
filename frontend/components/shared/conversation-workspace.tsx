@@ -30,6 +30,7 @@ import { io } from "socket.io-client"
 import { StatusBadge } from "@/components/shared/status-badge"
 import {
   resumeConversationAiAction,
+  saveConversationMessageTranslationAction,
   sendManualConversationMessageAction,
   sendPausedSupplierReplyAction,
   stopConversationAiAction,
@@ -176,6 +177,7 @@ type ConversationWorkspaceProps = {
   supplier?: Supplier
   linkedProducts: Product[]
   invoicesById: Record<string, Invoice>
+  initialMessages?: NegotiationMessage[]
 }
 
 export function ConversationWorkspace({
@@ -183,6 +185,7 @@ export function ConversationWorkspace({
   supplier,
   linkedProducts,
   invoicesById,
+  initialMessages = [],
 }: ConversationWorkspaceProps) {
   const router = useRouter()
   type SocketMessagePayload = {
@@ -192,18 +195,36 @@ export function ConversationWorkspace({
     file_url?: string | null
     file_name?: string | null
     file_type?: string | null
+    id?: string
+    translated_content?: string | null
   }
 
   const [preview, setPreview] = useState<PreviewTarget | null>(null)
   const [pulseMessageId, setPulseMessageId] = useState<string | null>(null)
   const [pdfInlineOpen, setPdfInlineOpen] = useState<Record<string, boolean>>({})
 
-  const [liveMessages, setLiveMessages] = useState<MessageWithFileUrl[]>([])
+  const [liveMessages, setLiveMessages] = useState<MessageWithFileUrl[]>(
+    () => initialMessages as MessageWithFileUrl[]
+  )
   const [messageTranslations, setMessageTranslations] = useState<
     Record<string, string>
   >({})
   const [isWaitingForAI, setIsWaitingForAI] = useState(false)
-  const seenMessageSignaturesRef = useRef<Set<string>>(new Set())
+  const initialMessageSignatures = useMemo(
+    () =>
+      new Set(
+        initialMessages.map((message) =>
+          [
+            message.author.toLowerCase(),
+            message.body.trim(),
+            fileUrlFor(message) ?? "",
+            message.attachmentLabel ?? "",
+          ].join("|")
+        )
+      ),
+    [initialMessages]
+  )
+  const seenMessageSignaturesRef = useRef<Set<string>>(initialMessageSignatures)
   const translationRequestsRef = useRef<Set<string>>(new Set())
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const autoStartAttemptedRef = useRef(false)
@@ -248,6 +269,7 @@ export function ConversationWorkspace({
       conversation.negotiationState === "Closed"
     )
   }, [conversation])
+  const showManualMessageComposer = manualTakeoverActive || isConversationComplete
 
   const shouldAutoStartNegotiation = useMemo(
     () =>
@@ -266,7 +288,10 @@ export function ConversationWorkspace({
   const supplierMessageLanguage = getMessageLanguageCode(
     supplier?.preferredLanguage
   )
-  const [autoTranslateEnabled, setAutoTranslateEnabled] = useState(
+  const [aiAutoTranslateEnabled, setAiAutoTranslateEnabled] = useState(
+    supplierPreferredLanguage !== "en"
+  )
+  const [manualTranslateEnabled, setManualTranslateEnabled] = useState(
     supplierPreferredLanguage !== "en"
   )
 
@@ -277,6 +302,7 @@ export function ConversationWorkspace({
   useEffect(() => {
     liveMessages.forEach((message) => {
       if (messageTranslations[message.id]) return
+      if (message.translation?.trim()) return
       if (translationRequestsRef.current.has(message.id)) return
       if (!message.language || message.language === "en") return
       if (message.author !== "supplier" && message.author !== "ai") return
@@ -295,6 +321,10 @@ export function ConversationWorkspace({
           ...current,
           [message.id]: result.translation!.trim(),
         }))
+        void saveConversationMessageTranslationAction({
+          messageId: message.id,
+          translation: result.translation!.trim(),
+        })
       })
     })
   }, [liveMessages, messageTranslations])
@@ -350,7 +380,10 @@ export function ConversationWorkspace({
     setLiveMessages((prev) => [
         ...prev,
         {
-          id: `live-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          id:
+            typeof data?.id === "string" && data.id.trim().length > 0
+              ? data.id.trim()
+              : `live-${Date.now()}-${Math.random().toString(16).slice(2)}`,
           conversationId: conversation.id,
           supplierId: conversation.supplierId,
           type: isAiSender
@@ -361,9 +394,13 @@ export function ConversationWorkspace({
           author: isAiSender ? "ai" : isSupplierSender ? "supplier" : "merchant",
           sentiment: "neutral",
           body: content,
+          translation:
+            typeof data?.translated_content === "string"
+              ? data.translated_content.trim() || undefined
+              : undefined,
           language:
             isAiSender
-              ? autoTranslateEnabled
+              ? aiAutoTranslateEnabled
                 ? supplierMessageLanguage
                 : "en"
               : isSupplierSender
@@ -382,7 +419,7 @@ export function ConversationWorkspace({
   }, [
     conversation.id,
     conversation.supplierId,
-    autoTranslateEnabled,
+    aiAutoTranslateEnabled,
     supplier?.name,
     supplierMessageLanguage,
   ])
@@ -400,7 +437,7 @@ export function ConversationWorkspace({
         },
         body: JSON.stringify({
           conversation_id: conversation.id,
-          auto_translate_enabled: autoTranslateEnabled,
+          auto_translate_enabled: aiAutoTranslateEnabled,
         }),
       })
 
@@ -431,7 +468,7 @@ export function ConversationWorkspace({
     } finally {
       setIsNegotiating(false)
     }
-  }, [autoTranslateEnabled, conversation.id, isConversationComplete, manualTakeoverActive])
+  }, [aiAutoTranslateEnabled, conversation.id, isConversationComplete, manualTakeoverActive])
 
   useEffect(() => {
     if (!shouldAutoStartNegotiation || autoStartAttemptedRef.current) return
@@ -487,7 +524,7 @@ export function ConversationWorkspace({
         body: JSON.stringify({
           conversation_id: conversation.id,
           supplier_message: optimisticContent,
-          auto_translate_enabled: autoTranslateEnabled,
+          auto_translate_enabled: aiAutoTranslateEnabled,
         }),
       })
 
@@ -558,7 +595,7 @@ export function ConversationWorkspace({
             file_url: uploadResult.file_url,
             file_name: uploadResult.file_name,
             file_type: uploadResult.file_type,
-            auto_translate_enabled: autoTranslateEnabled,
+            auto_translate_enabled: aiAutoTranslateEnabled,
           }),
         })
 
@@ -588,7 +625,7 @@ export function ConversationWorkspace({
         setIsSendingReply(false)
       }
     },
-    [autoTranslateEnabled, conversation.id, isConversationComplete, manualTakeoverActive]
+    [aiAutoTranslateEnabled, conversation.id, isConversationComplete, manualTakeoverActive]
   )
 
   const openPreview = useCallback(
@@ -739,7 +776,7 @@ export function ConversationWorkspace({
           },
           body: JSON.stringify({
             conversation_id: conversation.id,
-            auto_translate_enabled: autoTranslateEnabled,
+            auto_translate_enabled: aiAutoTranslateEnabled,
           }),
         })
 
@@ -767,7 +804,7 @@ export function ConversationWorkspace({
       }
     })
   }, [
-    autoTranslateEnabled,
+    aiAutoTranslateEnabled,
     conversation.id,
     conversation.supplierId,
     isConversationComplete,
@@ -788,7 +825,7 @@ export function ConversationWorkspace({
         conversationId: conversation.id,
         supplierId: conversation.supplierId,
         message,
-        autoTranslateEnabled,
+        autoTranslateEnabled: manualTranslateEnabled,
         languageCode: supplierMessageLanguage,
       })
 
@@ -797,25 +834,52 @@ export function ConversationWorkspace({
         return
       }
 
-      setLiveMessages((prev) => [
-        ...prev,
-        {
-          id: `manual-admin-${Date.now()}`,
-          conversationId: conversation.id,
-          supplierId: conversation.supplierId,
-          type: "merchant-action",
-          author: "merchant",
-          sentiment: "neutral",
-          body: message,
-          language: autoTranslateEnabled ? supplierMessageLanguage : "en",
-          createdAt: new Date().toISOString(),
-        },
-      ])
+      const sentMessage = result.sentMessage?.trim() || message
+      const sentLanguage =
+        result.languageCode && result.languageCode !== "en"
+          ? getMessageLanguageCode(result.languageCode)
+          : "en"
+      const sentSignature = [
+        "merchant",
+        sentMessage,
+        "",
+        "",
+      ].join("|")
+      setLiveMessages((prev) => {
+        const alreadyVisible = prev.some(
+          (existing) =>
+            [
+              existing.author.toLowerCase(),
+              existing.body.trim(),
+              fileUrlFor(existing) ?? "",
+              existing.attachmentLabel ?? "",
+            ].join("|") === sentSignature
+        )
+
+        seenMessageSignaturesRef.current.add(sentSignature)
+
+        if (alreadyVisible) return prev
+
+        return [
+          ...prev,
+          {
+            id: `manual-admin-${Date.now()}`,
+            conversationId: conversation.id,
+            supplierId: conversation.supplierId,
+            type: "merchant-action",
+            author: "merchant",
+            sentiment: "neutral",
+            body: sentMessage,
+            language: sentLanguage,
+            createdAt: new Date().toISOString(),
+          },
+        ]
+      })
       setManualMessage("")
       router.refresh()
     })
   }, [
-    autoTranslateEnabled,
+    manualTranslateEnabled,
     conversation.id,
     conversation.supplierId,
     manualMessage,
@@ -1100,30 +1164,30 @@ export function ConversationWorkspace({
                         {supplierPreferredLanguageLabel}
                       </span>
                       . AI will reply in{" "}
-                      {autoTranslateEnabled ? "that language" : "English"}.
+                      {aiAutoTranslateEnabled ? "that language" : "English"}.
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() =>
-                      setAutoTranslateEnabled((current) => !current)
+                      setAiAutoTranslateEnabled((current) => !current)
                     }
                     className={cn(
                       "flex h-8 items-center gap-2 rounded-[10px] border px-3 text-[12px] font-medium transition-colors",
-                      autoTranslateEnabled
+                      aiAutoTranslateEnabled
                         ? "border-[#8B5CF6]/45 bg-[#8B5CF6]/15 text-[#C4B5FD] hover:bg-[#8B5CF6]/20"
                         : "border-[#243047] bg-[#111827] text-[#9CA3AF] hover:bg-[#172033]"
                     )}
-                    aria-pressed={autoTranslateEnabled}
+                    aria-pressed={aiAutoTranslateEnabled}
                   >
                     <span
                       className={cn(
                         "size-2 rounded-full",
-                        autoTranslateEnabled ? "bg-[#8B5CF6]" : "bg-[#6B7280]"
+                        aiAutoTranslateEnabled ? "bg-[#8B5CF6]" : "bg-[#6B7280]"
                       )}
                       aria-hidden="true"
                     />
-                    Auto-translate {autoTranslateEnabled ? "ON" : "OFF"}
+                    AI translation {aiAutoTranslateEnabled ? "ON" : "OFF"}
                   </button>
                 </div>
               ) : null}
@@ -1160,29 +1224,75 @@ export function ConversationWorkspace({
                 <div ref={messagesEndRef} />
               </div>
 
-              {manualTakeoverActive ? (
+              {showManualMessageComposer ? (
                 <div className="shrink-0 border-t border-[#243047] bg-[#0B1020] p-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] font-medium text-[#E5E7EB]">
                         Admin Manual Message
                       </span>
-                      <StatusBadge label="AI Stopped" tone="danger" />
+                      <StatusBadge
+                        label={isConversationComplete ? "Post-completion" : "AI Stopped"}
+                        tone={isConversationComplete ? "success" : "danger"}
+                      />
                       {supplierPreferredLanguage !== "en" ? (
                         <StatusBadge
                           label={
-                            autoTranslateEnabled
-                              ? `Translation ON · ${supplierPreferredLanguageLabel}`
-                              : "Translation OFF"
+                            manualTranslateEnabled
+                              ? `Manual translation ON · ${supplierPreferredLanguageLabel}`
+                              : "Manual translation OFF"
                           }
-                          tone={autoTranslateEnabled ? "ai" : "default"}
+                          tone={manualTranslateEnabled ? "ai" : "default"}
                         />
                       ) : null}
                     </div>
                     <span className="text-[12px] text-[#9CA3AF]">
-                      Autonomous negotiation is paused.
+                      {isConversationComplete
+                        ? "Send a supplier-facing message without reopening the workflow."
+                        : "Autonomous negotiation is paused."}
                     </span>
                   </div>
+                  {supplierPreferredLanguage !== "en" ? (
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[#243047] bg-[#111827] px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <Languages
+                          className="size-4 text-[#C4B5FD]"
+                          aria-hidden="true"
+                        />
+                        <span className="text-[13px] text-[#E5E7EB]">
+                          Manual message will send in{" "}
+                          <span className="font-semibold text-[#C4B5FD]">
+                            {manualTranslateEnabled
+                              ? supplierPreferredLanguageLabel
+                              : "English"}
+                          </span>
+                          .
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setManualTranslateEnabled((current) => !current)
+                        }
+                        className={cn(
+                          "flex h-8 items-center gap-2 rounded-[10px] border px-3 text-[12px] font-medium transition-colors",
+                          manualTranslateEnabled
+                            ? "border-[#8B5CF6]/45 bg-[#8B5CF6]/15 text-[#C4B5FD] hover:bg-[#8B5CF6]/20"
+                            : "border-[#243047] bg-[#0B1220] text-[#9CA3AF] hover:bg-[#172033]"
+                        )}
+                        aria-pressed={manualTranslateEnabled}
+                      >
+                        <span
+                          className={cn(
+                            "size-2 rounded-full",
+                            manualTranslateEnabled ? "bg-[#8B5CF6]" : "bg-[#6B7280]"
+                          )}
+                          aria-hidden="true"
+                        />
+                        Manual translation {manualTranslateEnabled ? "ON" : "OFF"}
+                      </button>
+                    </div>
+                  ) : null}
                   <div className="flex gap-3">
                     <textarea
                       value={manualMessage}
@@ -1195,14 +1305,13 @@ export function ConversationWorkspace({
                       }}
                       placeholder="Type the admin message to send to the supplier..."
                       className="min-h-[76px] flex-1 resize-none rounded-[10px] border border-[#243047] bg-[#172033] px-3 py-2 text-[14px] leading-6 text-[#E5E7EB] outline-none placeholder:text-[#6B7280] focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20"
-                      disabled={isSendingManualMessage || isConversationComplete}
+                      disabled={isSendingManualMessage}
                     />
                     <Button
                       type="button"
                       onClick={handleSendManualMessage}
                       disabled={
                         isSendingManualMessage ||
-                        isConversationComplete ||
                         !manualMessage.trim()
                       }
                       className="h-[76px] rounded-[10px] bg-[#3B82F6] px-4 text-[13px] text-white hover:bg-[#2563EB] disabled:opacity-50"

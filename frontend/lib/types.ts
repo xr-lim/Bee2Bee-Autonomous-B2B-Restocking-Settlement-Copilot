@@ -117,6 +117,7 @@ export type Supplier = {
   id: string
   name: string
   region: string
+  telegramChatId?: string | null
   reliabilityScore: number
   leadTimeDays: number
   status: "preferred" | "watchlist" | "inactive"

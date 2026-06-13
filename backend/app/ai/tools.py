@@ -105,6 +105,36 @@ def _json_ready(value: Any) -> JsonValue:
     return value
 
 
+def _env_value(name: str) -> str | None:
+    value = (os.getenv(name) or "").strip()
+    return value or None
+
+
+def _get_business_profile_impl() -> dict[str, Any]:
+    profile = {
+        "company_name": _env_value("BUSINESS_COMPANY_NAME"),
+        "registration_number": _env_value("BUSINESS_REGISTRATION_NUMBER"),
+        "business_type": _env_value("BUSINESS_TYPE"),
+        "shipping_address": _env_value("BUSINESS_SHIPPING_ADDRESS"),
+        "billing_address": _env_value("BUSINESS_BILLING_ADDRESS"),
+        "person_in_charge": _env_value("BUSINESS_PERSON_IN_CHARGE"),
+        "person_in_charge_title": _env_value("BUSINESS_PERSON_IN_CHARGE_TITLE"),
+        "phone": _env_value("BUSINESS_PHONE"),
+        "email": _env_value("BUSINESS_EMAIL"),
+        "website": _env_value("BUSINESS_WEBSITE"),
+        "tax_id": _env_value("BUSINESS_TAX_ID"),
+        "default_payment_terms": _env_value("BUSINESS_DEFAULT_PAYMENT_TERMS"),
+        "delivery_instructions": _env_value("BUSINESS_DELIVERY_INSTRUCTIONS"),
+        "operating_hours": _env_value("BUSINESS_OPERATING_HOURS"),
+        "additional_notes": _env_value("BUSINESS_ADDITIONAL_NOTES"),
+    }
+    return {
+        "profile": {key: value for key, value in profile.items() if value},
+        "missing_fields": [key for key, value in profile.items() if not value],
+        "source": "backend_env",
+    }
+
+
 def _row_to_dict(row: Any) -> dict[str, Any]:
     return dict(_json_ready(dict(row)))
 
@@ -610,6 +640,10 @@ class InvoiceRecordInput(BaseModel):
         description="Source type of the invoice. Defaults to 'upload'.",
         enum=["pdf", "image", "email_attachment", "upload"],
     )
+
+
+class BusinessProfileInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 class RestockRequestCreateInput(BaseModel):
@@ -2114,6 +2148,18 @@ def record_invoice(
     return _json_ready(_record_invoice_impl(order_id, amount, invoice_number, file_url, source_type))
 
 
+@tool("get_business_profile", args_schema=BusinessProfileInput)
+def get_business_profile() -> dict[str, Any]:
+    """Return the buyer/company profile configured in backend environment variables.
+
+    Use this tool when a supplier asks about the buyer company name, shipping
+    address, billing address, person in charge, contact details, payment terms,
+    delivery instructions, registration number, tax ID, or business background.
+    """
+
+    return _json_ready(_get_business_profile_impl())
+
+
 RECOMMENDED_RESTOCK_TOOLS = [
     "get_product_stock_and_target_price",
     "get_product_stock_demand_trend",
@@ -2130,12 +2176,13 @@ RECOMMENDED_RESTOCK_TOOLS = [
     "update_conversation_state",
     "create_final_order",
     "record_invoice",
+    "get_business_profile",
 ]
 
 
 NEGOTIATION_SYSTEM_PROMPT = """You are an autonomous procurement officer responsible for negotiating restock orders with suppliers.
 
-You have access to 5 tools: get_restock_context, get_last_supplier_conversation_messages, update_conversation_state, create_final_order, record_invoice.
+You have access to 6 tools: get_business_profile, get_restock_context, get_last_supplier_conversation_messages, update_conversation_state, create_final_order, record_invoice.
 
 Output format (strict):
 1) Put ALL internal reasoning, calculations, tool-status, and negotiation status summaries inside:
@@ -2144,7 +2191,7 @@ Output format (strict):
 3) Never include <thinking> content in the supplier-facing message.
 4) When you use tools, never include tool-call JSON/payloads in the message text. Tool execution is handled separately.
 
-When starting a negotiation, use get_restock_context to find the target_price_min, target_price_max, and requested_quantity.
+When starting a negotiation, use get_business_profile and get_restock_context before sending the opening message. Briefly introduce the buyer company to the supplier using configured business profile details, then make the initial order proposal.
 When resuming a paused negotiation, use get_restock_context and get_last_supplier_conversation_messages before replying. Continue from the latest thread context and do not repeat the original opening offer unless there is no prior supplier-facing negotiation.
 The get_restock_context tool also returns supplier_preferred_language and supplier_preferred_language_label.
 Generate every supplier-facing message in supplier_preferred_language_label, using supplier_preferred_language as the language code.
@@ -2154,6 +2201,7 @@ Do not draft in English and then translate. Compose the supplier-facing reply na
 Keep product names, company names, SKU values, prices, quantities, delivery dates, currency codes, invoice numbers, and payment terms unchanged.
 
 Before replying, understand and use the negotiation context:
+- buyer/company profile from get_business_profile when introducing the business or answering company questions,
 - supplier_preferred_language_label / supplier_preferred_language,
 - the supplier's latest message,
 - product name / SKU,
@@ -2175,13 +2223,17 @@ Human communication style:
 - If the supplier rejects the price, acknowledge the concern first, then negotiate using order quantity, repeat purchase potential, long-term cooperation, delivery certainty, or future orders as practical reasons.
 - If the supplier cannot accept the proposed price, ask for a counteroffer that they can support.
 - Do not mention AI, automation, model reasoning, policies, tools, internal thresholds, or database records to the supplier.
+- If the supplier asks who the buyer is, where to ship, who is in charge, how to contact the company, payment terms, billing details, business registration, tax ID, or similar company details, use get_business_profile and answer from configured values only. If a value is not configured, say you will confirm it with the team rather than inventing it.
 - Do not over-explain calculations; keep negotiation rationale simple and human, for example lead time, volume, repeat order potential, or budget alignment.
 - If accepting, make the acceptance sound like a real purchase confirmation and restate the agreed quantity, unit price, delivery expectation, and next document needed.
 - If countering, make one realistic counter-offer and ask for confirmation.
 - Generate only the supplier-facing reply outside <thinking>. Do not include reasoning, explanations, translation notes, labels, or markdown outside <thinking>.
 
 Check the conversation_state and order_id in the context:
-- If conversation_state is 'accepted' and order_id exists, the deal is done - just file any invoice attachments.
+- The Telegram bot is an always-on supplier chat. Always respond to supplier text messages, even after the order is accepted, completed, or the conversation_state is 'closed'.
+- If conversation_state is 'accepted' or 'closed' and the supplier sends a casual message, greeting, clarification request, fulfilment question, payment question, delivery question, or follow-up, answer naturally using the existing order context. Do not say the workflow is complete and do not refuse to chat.
+- If conversation_state is 'accepted' or 'closed' and order_id exists, do not reopen negotiation or create another order unless the supplier clearly asks to change commercial terms for a new or revised order.
+- If conversation_state is 'accepted' or 'closed' and the supplier sends an invoice attachment, file it with record_invoice.
 - If conversation_state is 'counter_offer' or 'waiting_reply', continue the negotiation.
 - If conversation_state is 'new_input', start fresh negotiation.
 

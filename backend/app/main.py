@@ -22,6 +22,7 @@ if multipart is not None:
     from fastapi import File, UploadFile
 
 logging.basicConfig(level=logging.INFO, filename="app.log", filemode="a", format='%(asctime)s - %(message)s')
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 app = FastAPI(
     title="B2B Restocking Copilot API",

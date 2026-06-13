@@ -55,6 +55,7 @@ type SupplierPayload = {
   supplierId?: string
   name: string
   region: string
+  telegramChatId?: string
   leadTimeDays: number
   reliabilityScore: number
   status: Supplier["status"]
@@ -121,6 +122,7 @@ export function SuppliersManager({
           supplier.name.toLowerCase().includes(keyword) ||
           supplier.region.toLowerCase().includes(keyword) ||
           supplier.id.toLowerCase().includes(keyword) ||
+          (supplier.telegramChatId ?? "").toLowerCase().includes(keyword) ||
           getLanguageLabel(supplier.preferredLanguage).toLowerCase().includes(keyword) ||
           statusLabel[supplier.status].toLowerCase().includes(keyword))
     )
@@ -400,6 +402,7 @@ export function SuppliersManager({
                                   supplierId: supplier.id,
                                   name: supplier.name,
                                   region: supplier.region,
+                                  telegramChatId: supplier.telegramChatId ?? "",
                                   leadTimeDays: supplier.leadTimeDays,
                                   reliabilityScore: supplier.reliabilityScore,
                                   status: supplier.status,
@@ -493,6 +496,9 @@ function SupplierDialog({
 }: SupplierDialogProps) {
   const [name, setName] = useState(initialValues?.name ?? "")
   const [region, setRegion] = useState(initialValues?.region ?? "")
+  const [telegramChatId, setTelegramChatId] = useState(
+    initialValues?.telegramChatId ?? ""
+  )
   const [leadTime, setLeadTime] = useState(
     initialValues?.leadTimeDays?.toString() ?? ""
   )
@@ -534,6 +540,7 @@ function SupplierDialog({
       supplierId: initialValues?.supplierId,
       name: name.trim(),
       region: region.trim(),
+      telegramChatId: telegramChatId.trim(),
       leadTimeDays: leadNumber,
       reliabilityScore: reliabilityNumber,
       status,
@@ -567,6 +574,14 @@ function SupplierDialog({
               value={region}
               onChange={(event) => setRegion(event.target.value)}
               placeholder="KL, Malaysia"
+              className="h-10 rounded-[10px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB] placeholder:text-[#6B7280]"
+            />
+          </Field>
+          <Field label="Telegram chat ID">
+            <Input
+              value={telegramChatId}
+              onChange={(event) => setTelegramChatId(event.target.value)}
+              placeholder="123456789"
               className="h-10 rounded-[10px] border-[#243047] bg-[#0B1220] text-[14px] text-[#E5E7EB] placeholder:text-[#6B7280]"
             />
           </Field>

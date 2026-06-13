@@ -70,23 +70,62 @@ function productName(products: Product[], sku: string) {
   return products.find((product) => product.sku === sku)?.name ?? sku
 }
 
-function linkedInvoiceStatus(invoices: Invoice[], conversation: Conversation) {
-  const invoice = invoices.find((item) =>
-    conversation.linkedSkus.includes(item.productSku)
+function linkedInvoice(invoices: Invoice[], conversation: Conversation) {
+  return (
+    (conversation.linkedInvoiceId
+      ? invoices.find((item) => item.id === conversation.linkedInvoiceId)
+      : undefined) ??
+    (conversation.workflowId
+      ? invoices.find((item) => item.workflowId === conversation.workflowId)
+      : undefined) ??
+    invoices.find((item) => conversation.linkedSkus.includes(item.productSku))
   )
+}
 
-  return invoice?.status ?? "pending"
+function linkedInvoiceStatus(invoices: Invoice[], conversation: Conversation) {
+  return linkedInvoice(invoices, conversation)?.status ?? "pending"
+}
+
+type BoardStage = "progress" | "review" | "accepted" | "completed"
+
+function conversationBoardStage(
+  invoices: Invoice[],
+  conversation: Conversation
+): BoardStage {
+  const invoice = linkedInvoice(invoices, conversation)
+  const invoiceComplete =
+    invoice?.status === "paid" || invoice?.approvalState === "Completed"
+
+  if (conversation.negotiationState === "Closed" || invoiceComplete) {
+    return "completed"
+  }
+
+  if (conversation.negotiationState === "Accepted") {
+    return "accepted"
+  }
+
+  if (
+    conversation.submittedOrderId &&
+    conversation.submittedOrderStatus !== "Completed"
+  ) {
+    return "accepted"
+  }
+
+  if (["Needs Analysis", "Escalated"].includes(conversation.negotiationState)) {
+    return "review"
+  }
+
+  return "progress"
 }
 
 function statusLabel(invoices: Invoice[], conversation: Conversation) {
-  if (
-    conversation.negotiationState === "Accepted" &&
-    linkedInvoiceStatus(invoices, conversation) !== "paid"
-  ) {
+  const boardStage = conversationBoardStage(invoices, conversation)
+
+  if (boardStage === "accepted") {
     return "Accepted, invoice need to approve"
   }
 
-  if (conversation.negotiationState === "Closed") {
+  if (boardStage === "completed") {
     return "Completed"
   }
 
@@ -147,9 +186,7 @@ export function ConversationsBrowser({
         "AI is actively negotiating or waiting on supplier response.",
       tone: "ai" as StatusTone,
       match: (conversation: Conversation) =>
-        ["Counter Offer Suggested", "Waiting Reply", "New Input"].includes(
-          conversation.negotiationState
-        ),
+        conversationBoardStage(invoices, conversation) === "progress",
     },
     {
       title: "Need Review",
@@ -157,23 +194,21 @@ export function ConversationsBrowser({
         "Messy input, missing fields, or escalation needs operator attention.",
       tone: "warning" as StatusTone,
       match: (conversation: Conversation) =>
-        ["Needs Analysis", "Escalated"].includes(conversation.negotiationState),
+        conversationBoardStage(invoices, conversation) === "review",
     },
     {
       title: "Accepted, Invoice Need To Approve",
       description: "Supplier terms accepted and invoice approval is still pending.",
       tone: "success" as StatusTone,
       match: (conversation: Conversation) =>
-        conversation.negotiationState === "Accepted" &&
-        linkedInvoiceStatus(invoices, conversation) !== "paid",
+        conversationBoardStage(invoices, conversation) === "accepted",
     },
     {
       title: "Completed",
       description: "Negotiation and invoice follow-up are closed.",
       tone: "default" as StatusTone,
       match: (conversation: Conversation) =>
-        conversation.negotiationState === "Closed" ||
-        linkedInvoiceStatus(invoices, conversation) === "paid",
+        conversationBoardStage(invoices, conversation) === "completed",
     },
   ]
 

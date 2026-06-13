@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "powershell -ExecutionPolicy Bypass -File .\\run.ps1",
     "db:init": "node ./scripts/db-init.mjs",
-    "db:seed": "node ./scripts/db-seed.mjs"
+    "db:seed": "node ./scripts/db-seed.mjs",
+    "telegram:connect": "node ./scripts/telegram-connect.mjs"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

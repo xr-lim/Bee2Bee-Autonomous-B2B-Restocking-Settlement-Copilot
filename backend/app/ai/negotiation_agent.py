@@ -6,6 +6,7 @@ from typing import Any
 from app.ai.client import create_message, extract_text
 from app.ai.tools import (
     NEGOTIATION_SYSTEM_PROMPT,
+    get_business_profile,
     get_last_supplier_conversation_messages,
     get_restock_context,
     update_conversation_state,
@@ -49,6 +50,7 @@ async def run_negotiation_agent(
         input_message = (
             f"Resume autonomous negotiation for conversation {conversation_id}. "
             "Do NOT make a fresh initial proposal. "
+            "Use get_business_profile if the supplier asks anything about our company, shipping details, contacts, or payment/business profile. "
             "First use get_restock_context with conversation_id to get product, quantity, target prices, supplier language, and current state. "
             "Also use get_last_supplier_conversation_messages with conversation_id and limit 8 to inspect the latest thread. "
             "Continue from the most recent meaningful supplier/admin exchange. "
@@ -59,7 +61,11 @@ async def run_negotiation_agent(
         )
     elif supplier_message is None and not file_url:
         # Starting negotiation - agent should formulate initial proposal
-        input_message = f"Start a negotiation for conversation {conversation_id}. Get the context and make an initial proposal. {language_instruction}"
+        input_message = (
+            f"Start a negotiation for conversation {conversation_id}. "
+            "Use get_business_profile and get_restock_context, briefly introduce our company to the supplier, then make the initial proposal. "
+            f"{language_instruction}"
+        )
 
         # Explicitly give the agent the ID so it doesn't guess
         if restock_request_id:
@@ -85,13 +91,25 @@ async def run_negotiation_agent(
 
         input_parts.append(
             "ALWAYS start by using get_restock_context with conversation_id to get the target prices and product details. "
-            "Then evaluate the supplier's offer against our budget constraints. "
+            "Also use get_last_supplier_conversation_messages with conversation_id and limit 8 to understand the latest thread. "
+            "If the supplier message is about price, quantity, delivery, terms, invoice, or fulfilment, handle it against the order context and budget constraints. "
+            "If the supplier asks about our company, shipping address, billing address, person in charge, contact details, payment terms, business registration, tax ID, or delivery instructions, use get_business_profile and answer only from configured values. "
+            "If the supplier message is casual, a greeting, a follow-up question, support request, or anything not directly changing order terms, still reply naturally and helpfully in the supplier-facing language without trying to reopen or force a new order negotiation. "
+            "Always send a supplier-facing reply for text messages, even when the conversation state is accepted or closed. "
             f"{language_instruction}"
         )
 
         input_message = " ".join(input_parts)
 
     tools = [
+        {
+            "name": "get_business_profile",
+            "description": "Return the buyer company profile configured in backend environment variables, including company name, shipping address, person in charge, contact details, payment terms, delivery instructions, and similar business information.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
+        },
         {
             "name": "get_last_supplier_conversation_messages",
             "description": "Fetch the recent message buffer for a supplier negotiation thread",
@@ -353,7 +371,9 @@ async def run_negotiation_agent(
                 tool_input = tool_call.get("input", {})
 
                 try:
-                    if tool_name == "get_restock_context":
+                    if tool_name == "get_business_profile":
+                        result = get_business_profile.invoke(tool_input)
+                    elif tool_name == "get_restock_context":
                         result = get_restock_context.invoke(tool_input)
                     elif tool_name == "get_last_supplier_conversation_messages":
                         result = get_last_supplier_conversation_messages.invoke(tool_input)
