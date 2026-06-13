@@ -405,11 +405,11 @@ export function ConversationWorkspace({
       })
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => "")
         throw new Error(
-          `Failed to start negotiation: ${response.status} ${response.statusText}${
-            errorText ? `\n${errorText}` : ""
-          }`
+          await readApiErrorMessage(
+            response,
+            `Failed to start negotiation: ${response.status} ${response.statusText}`
+          )
         )
       }
 
@@ -422,7 +422,11 @@ export function ConversationWorkspace({
     } catch (error) {
       autoStartAttemptedRef.current = false
       console.error("Failed to start negotiation:", error)
-      alert("Failed to start negotiation. Check console for details.")
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to start negotiation. Check console for details."
+      )
       setIsWaitingForAI(false)
     } finally {
       setIsNegotiating(false)
@@ -488,11 +492,11 @@ export function ConversationWorkspace({
       })
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => "")
         throw new Error(
-          `Failed to send reply: ${response.status} ${response.statusText}${
-            errorText ? `\n${errorText}` : ""
-          }`
+          await readApiErrorMessage(
+            response,
+            `Failed to send reply: ${response.status} ${response.statusText}`
+          )
         )
       }
 
@@ -505,7 +509,11 @@ export function ConversationWorkspace({
       setSupplierReply("")
     } catch (error) {
       console.error("Failed to send supplier reply:", error)
-      alert("Failed to send reply. Check console for details.")
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to send reply. Check console for details."
+      )
       setIsWaitingForAI(false)
     } finally {
       setIsSendingReply(false)
@@ -530,11 +538,11 @@ export function ConversationWorkspace({
         })
 
         if (!uploadResponse.ok) {
-          const errorText = await uploadResponse.text().catch(() => "")
           throw new Error(
-            `Failed to upload file: ${uploadResponse.status} ${uploadResponse.statusText}${
-              errorText ? `\n${errorText}` : ""
-            }`
+            await readApiErrorMessage(
+              uploadResponse,
+              `Failed to upload file: ${uploadResponse.status} ${uploadResponse.statusText}`
+            )
           )
         }
 
@@ -555,11 +563,11 @@ export function ConversationWorkspace({
         })
 
         if (!response.ok) {
-          const errorText = await response.text().catch(() => "")
           throw new Error(
-            `Failed to send attachment: ${response.status} ${response.statusText}${
-              errorText ? `\n${errorText}` : ""
-            }`
+            await readApiErrorMessage(
+              response,
+              `Failed to send attachment: ${response.status} ${response.statusText}`
+            )
           )
         }
 
@@ -570,7 +578,11 @@ export function ConversationWorkspace({
         }
       } catch (error) {
         console.error("Failed to send supplier attachment:", error)
-        alert("Failed to send attachment. Check console for details.")
+        alert(
+          error instanceof Error
+            ? error.message
+            : "Failed to send attachment. Check console for details."
+        )
         setIsWaitingForAI(false)
       } finally {
         setIsSendingReply(false)
@@ -732,11 +744,11 @@ export function ConversationWorkspace({
         })
 
         if (!response.ok) {
-          const errorText = await response.text().catch(() => "")
           throw new Error(
-            `Failed to resume negotiation: ${response.status} ${response.statusText}${
-              errorText ? `\n${errorText}` : ""
-            }`
+            await readApiErrorMessage(
+              response,
+              `Failed to resume negotiation: ${response.status} ${response.statusText}`
+            )
           )
         }
 
@@ -744,7 +756,11 @@ export function ConversationWorkspace({
         router.refresh()
       } catch (error) {
         console.error("Failed to resume negotiation:", error)
-        setManualMessageError("AI was resumed, but could not continue the thread. Check backend logs.")
+        setManualMessageError(
+          error instanceof Error
+            ? error.message
+            : "AI was resumed, but could not continue the thread. Check backend logs."
+        )
         setIsWaitingForAI(false)
       } finally {
         setIsNegotiating(false)
