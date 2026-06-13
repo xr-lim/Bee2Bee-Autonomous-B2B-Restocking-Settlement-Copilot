@@ -69,6 +69,13 @@ import { cn } from "@/lib/utils"
 type MessageWithFileUrl = NegotiationMessage & { file_url?: string | null }
 const fileUrlFor = (message: NegotiationMessage) =>
   (message as MessageWithFileUrl).file_url ?? undefined
+const messageSignature = (message: NegotiationMessage) =>
+  [
+    message.author.toLowerCase(),
+    message.body.trim(),
+    fileUrlFor(message) ?? "",
+    message.attachmentLabel ?? "",
+  ].join("|")
 
 function parseTargetPriceRange(value: string) {
   const matches = value.match(/\d+(?:\.\d+)?/g) ?? []
@@ -211,17 +218,7 @@ export function ConversationWorkspace({
   >({})
   const [isWaitingForAI, setIsWaitingForAI] = useState(false)
   const initialMessageSignatures = useMemo(
-    () =>
-      new Set(
-        initialMessages.map((message) =>
-          [
-            message.author.toLowerCase(),
-            message.body.trim(),
-            fileUrlFor(message) ?? "",
-            message.attachmentLabel ?? "",
-          ].join("|")
-        )
-      ),
+    () => new Set(initialMessages.map(messageSignature)),
     [initialMessages]
   )
   const seenMessageSignaturesRef = useRef<Set<string>>(initialMessageSignatures)
@@ -294,10 +291,53 @@ export function ConversationWorkspace({
   const [manualTranslateEnabled, setManualTranslateEnabled] = useState(
     supplierPreferredLanguage !== "en"
   )
+  const isRawInvoiceAttachmentDuplicate = useCallback(
+    (message: NegotiationMessage, messages: NegotiationMessage[]) => {
+      if (message.invoiceId) return false
+      if (message.attachmentType !== "pdf" && message.attachmentType !== "image") {
+        return false
+      }
+
+      const fileUrl = fileUrlFor(message)
+      if (!fileUrl) return false
+
+      return messages.some(
+        (candidate) =>
+          candidate.id !== message.id &&
+          Boolean(candidate.invoiceId) &&
+          fileUrlFor(candidate) === fileUrl
+      )
+    },
+    []
+  )
+
+  useEffect(() => {
+    setLiveMessages((current) => {
+      const refreshedIds = new Set(initialMessages.map((message) => message.id))
+      const refreshedSignatures = new Set(initialMessages.map(messageSignature))
+      const transientMessages = current.filter((message) => {
+        if (refreshedIds.has(message.id)) return false
+        if (refreshedSignatures.has(messageSignature(message))) return false
+        if (isRawInvoiceAttachmentDuplicate(message, initialMessages)) return false
+        return true
+      })
+      const merged = [...initialMessages, ...transientMessages] as MessageWithFileUrl[]
+      seenMessageSignaturesRef.current = new Set(merged.map(messageSignature))
+      return merged
+    })
+  }, [initialMessages, isRawInvoiceAttachmentDuplicate])
+
+  const visibleMessages = useMemo(
+    () =>
+      liveMessages.filter(
+        (message) => !isRawInvoiceAttachmentDuplicate(message, liveMessages)
+      ),
+    [isRawInvoiceAttachmentDuplicate, liveMessages]
+  )
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [liveMessages.length])
+  }, [visibleMessages.length])
 
   useEffect(() => {
     liveMessages.forEach((message) => {
@@ -847,13 +887,7 @@ export function ConversationWorkspace({
       ].join("|")
       setLiveMessages((prev) => {
         const alreadyVisible = prev.some(
-          (existing) =>
-            [
-              existing.author.toLowerCase(),
-              existing.body.trim(),
-              fileUrlFor(existing) ?? "",
-              existing.attachmentLabel ?? "",
-            ].join("|") === sentSignature
+          (existing) => messageSignature(existing) === sentSignature
         )
 
         seenMessageSignaturesRef.current.add(sentSignature)
@@ -1193,7 +1227,7 @@ export function ConversationWorkspace({
               ) : null}
 
               <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-                {liveMessages.map((message) => {
+                {visibleMessages.map((message) => {
                   const invoice = message.invoiceId
                     ? invoicesById[message.invoiceId]
                     : undefined

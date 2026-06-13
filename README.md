@@ -213,16 +213,151 @@ Unlike traditional systems, Bee2Bee is:
 
 ## 📦 Getting Started (Dev Setup)
 
-```bash
-# Clone repo
-git clone https://github.com/your-repo/bee2bee.git
+### 1. Clone The Repository
 
-# Install frontend
+```powershell
+# Clone the project
+git clone https://github.com/xr-lim/Bee2Bee-Autonomous-B2B-Restocking-Settlement-Copilot.git
+
+# Enter the project folder
+cd Bee2Bee-Autonomous-B2B-Restocking-Settlement-Copilot
+```
+
+### 2. Configure Environment Variables
+
+```powershell
+# Copy the backend environment template
+copy backend\.env.example backend\.env
+```
+
+Update `backend/.env` with your own values:
+
+```env
+# Supabase/Postgres database connection
+SUPABASE_DB_URL=
+
+# Supabase API keys used by backend/frontend features
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+
+# AI provider configuration
+AI_PROVIDER=
+GEMINI_API_KEY=
+GEMINI_MODEL=
+
+# Telegram bot integration
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_WEBHOOK_SECRET=
+NGROK_AUTHTOKEN=
+
+# Business profile used by the negotiation AI
+BUSINESS_COMPANY_NAME=
+BUSINESS_SHIPPING_ADDRESS=
+BUSINESS_PERSON_IN_CHARGE=
+BUSINESS_PHONE=
+BUSINESS_EMAIL=
+BUSINESS_DEFAULT_PAYMENT_TERMS=
+```
+
+### 3. Install Dependencies
+
+```powershell
+# Install root helper scripts
+npm install
+
+# Install backend Node helper dependencies
+cd backend
+npm install
+
+# Install backend Python dependencies
+pip install -r requirements.txt
+
+# Return to the project root
+cd ..
+
+# Install frontend dependencies
 cd frontend
 npm install
-npm run dev
 
-# Install backend
+# Return to the project root
+cd ..
+```
+
+### 4. Initialize The Database
+
+```powershell
+# Apply the Supabase schema and migrations
+npm run db:init
+
+# Optional: seed demo data
+npm run db:seed
+```
+
+Useful schema files:
+
+- `backend/supabase/schema.sql`
+- `backend/supabase/seed-data.json`
+- `backend/supabase/migrations/20260613_supplier_telegram_chat_id.sql`
+- `backend/supabase/migrations/20260614_conversation_message_translations.sql`
+
+### 5. Run The Backend
+
+```powershell
+# Start FastAPI + Socket.IO on http://127.0.0.1:8000
+npm run backend:dev
+```
+
+The backend launcher uses:
+
+```powershell
+# Manual equivalent if needed
 cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload
+python -m uvicorn app.main:socket_app --host 127.0.0.1 --port 8000 --reload
+```
+
+### 6. Run The Frontend
+
+```powershell
+# Start the Next.js dashboard
+cd frontend
+npm run dev
+```
+
+Open the app at:
+
+```text
+http://localhost:3000
+```
+
+### 7. Connect Telegram With Ngrok
+
+```powershell
+# Start backend first, then run this from the project root
+npm run telegram:connect
+```
+
+Telegram setup notes:
+
+- Create a bot with `@BotFather`
+- Put the bot token in `TELEGRAM_BOT_TOKEN`
+- Put your ngrok token in `NGROK_AUTHTOKEN`
+- Add each supplier's Telegram chat id in the supplier manager or database
+- Full guide: `backend/TELEGRAM_SETUP.md`
+
+### 8. Useful Dev Checks
+
+```powershell
+# Check frontend TypeScript
+cd frontend
+npx tsc --noEmit
+
+# Check backend Python syntax for a file
+cd ..
+python -m py_compile backend/app/api/v1/routes_negotiation.py
+
+# Check git whitespace issues
+git diff --check
+```

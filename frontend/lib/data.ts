@@ -1133,7 +1133,7 @@ function mapMessages(
   )
   const supplierById = new Map(rows.suppliers.map((supplier) => [supplier.id, supplier]))
 
-  return rows.conversationMessages.map((message) => {
+  const messages: NegotiationMessage[] = rows.conversationMessages.map((message) => {
     const type = messageType(message)
     const attachment = attachmentType(message.messageType)
     const linkedInvoiceId =
@@ -1170,6 +1170,16 @@ function mapMessages(
           ? getMessageLanguageCode(supplier?.preferredLanguage)
           : "en",
     }
+  })
+
+  return messages.sort((first, second) => {
+    const firstTime = new Date(first.createdAt || 0).getTime()
+    const secondTime = new Date(second.createdAt || 0).getTime()
+    if (firstTime !== secondTime) return firstTime - secondTime
+
+    const firstRank = first.author === "supplier" ? 0 : first.author === "ai" ? 1 : 2
+    const secondRank = second.author === "supplier" ? 0 : second.author === "ai" ? 1 : 2
+    return firstRank - secondRank
   })
 }
 
