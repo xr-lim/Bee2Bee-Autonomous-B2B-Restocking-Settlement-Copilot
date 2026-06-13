@@ -1680,29 +1680,9 @@ export async function createSupplierAction(
       notes: "Added from supplier registry.",
     }
 
-    try {
-      await throwIfSupabaseError(
-        await supabase.from("suppliers").insert(insertPayload)
-      )
-    } catch (error) {
-      if (!isMissingSupabaseColumnError(error, "suppliers", "preferred_language_code")) {
-        throw error
-      }
-
-      if (!["en", "ms", "zh"].includes(preferredLanguage)) {
-        throw new Error(
-          "Supabase is missing suppliers.preferred_language_code. Run the latest supplier language migration before saving this language."
-        )
-      }
-
-      const legacyPayload = { ...insertPayload }
-      delete (legacyPayload as { preferred_language_code?: string }).preferred_language_code
-      ;(legacyPayload as { preferred_language?: string }).preferred_language =
-        preferredLanguage
-      await throwIfSupabaseError(
-        await supabase.from("suppliers").insert(legacyPayload)
-      )
-    }
+    await throwIfSupabaseError(
+      await supabase.from("suppliers").insert(insertPayload)
+    )
 
     revalidatePath("/suppliers")
     revalidatePath("/inventory")
@@ -1741,35 +1721,12 @@ export async function updateSupplierAction(
       preferred_language_code: preferredLanguage,
     }
 
-    try {
-      await throwIfSupabaseError(
-        await supabase
-          .from("suppliers")
-          .update(updatePayload)
-          .eq("id", payload.supplierId)
-      )
-    } catch (error) {
-      if (!isMissingSupabaseColumnError(error, "suppliers", "preferred_language_code")) {
-        throw error
-      }
-
-      if (!["en", "ms", "zh"].includes(preferredLanguage)) {
-        throw new Error(
-          "Supabase is missing suppliers.preferred_language_code. Run the latest supplier language migration before saving this language."
-        )
-      }
-
-      const legacyPayload = { ...updatePayload }
-      delete (legacyPayload as { preferred_language_code?: string }).preferred_language_code
-      ;(legacyPayload as { preferred_language?: string }).preferred_language =
-        preferredLanguage
-      await throwIfSupabaseError(
-        await supabase
-          .from("suppliers")
-          .update(legacyPayload)
-          .eq("id", payload.supplierId)
-      )
-    }
+    await throwIfSupabaseError(
+      await supabase
+        .from("suppliers")
+        .update(updatePayload)
+        .eq("id", payload.supplierId)
+    )
 
     revalidatePath("/suppliers")
     revalidatePath("/inventory")

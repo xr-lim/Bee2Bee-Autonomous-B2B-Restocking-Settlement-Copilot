@@ -42,3 +42,6 @@ alter table public.suppliers
 alter table public.suppliers
   add constraint suppliers_preferred_language_code_check
   check (preferred_language_code ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$');
+
+alter table public.suppliers
+  drop column if exists preferred_language;

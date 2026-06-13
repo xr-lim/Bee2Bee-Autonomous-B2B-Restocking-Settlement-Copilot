@@ -118,10 +118,7 @@ def _preferred_language_expression(suppliers: Table):
     if preferred_language_code_column is not None:
         return preferred_language_code_column
 
-    preferred_language_column = suppliers.c.get("preferred_language")
-    if preferred_language_column is None:
-        return literal(DEFAULT_SUPPLIER_LANGUAGE)
-    return preferred_language_column
+    return literal(DEFAULT_SUPPLIER_LANGUAGE)
 
 
 def _resolve_product(session: Session, sku: str) -> dict[str, Any]:
@@ -856,10 +853,10 @@ def _get_supplier_info_impl(
                 "name": supplier["name"],
                 "region": supplier["region"],
                 "preferred_language": normalize_supplier_language(
-                    supplier.get("preferred_language_code") or supplier.get("preferred_language")
+                    supplier.get("preferred_language_code")
                 ),
                 "preferred_language_label": supplier_language_label(
-                    supplier.get("preferred_language_code") or supplier.get("preferred_language")
+                    supplier.get("preferred_language_code")
                 ),
                 "lead_time_days": int(supplier["lead_time_days"]),
                 "reliability_score": float(supplier["reliability_score"]),
@@ -1031,10 +1028,10 @@ def _get_last_supplier_conversation_messages_impl(
                 "id": supplier_row["id"],
                 "name": supplier_row["name"],
                 "preferred_language": normalize_supplier_language(
-                    supplier_row.get("preferred_language_code") or supplier_row.get("preferred_language")
+                    supplier_row.get("preferred_language_code")
                 ),
                 "preferred_language_label": supplier_language_label(
-                    supplier_row.get("preferred_language_code") or supplier_row.get("preferred_language")
+                    supplier_row.get("preferred_language_code")
                 ),
             }
             if supplier_row
