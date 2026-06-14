@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import { usePathname } from "next/navigation"
 
+import { PageTransition } from "@/components/layout/page-transition"
 import { SidebarNav } from "@/components/layout/sidebar-nav"
 import { TopHeader } from "@/components/layout/top-header"
 
@@ -26,7 +27,7 @@ export function AppShell({ children }: AppShellProps) {
           <TopHeader />
           <main className="flex-1 overflow-y-auto">
             <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-6 px-4 pb-8 pt-2 sm:px-6 xl:px-8">
-              {children}
+              <PageTransition>{children}</PageTransition>
             </div>
           </main>
         </div>

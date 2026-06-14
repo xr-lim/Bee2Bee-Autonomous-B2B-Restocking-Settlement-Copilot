@@ -1,15 +1,23 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, Inbox } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { ArrowRight } from "lucide-react"
+import { useMemo, useState } from "react"
 
-import { EmptyState } from "@/components/shared/empty-state"
 import { FilterToolbar } from "@/components/shared/filter-toolbar"
 import { InvoiceProcessingTrigger } from "@/components/shared/invoice-ai-analysis-trigger"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Invoice, StatusTone, Supplier } from "@/lib/types"
 
 type InvoiceBoardProps = {
@@ -17,44 +25,34 @@ type InvoiceBoardProps = {
   suppliers: Supplier[]
 }
 
+type InvoiceTab = "ready" | "review" | "issue" | "completed"
+
 const riskTone: Record<Invoice["riskLevel"], StatusTone> = {
   "Low Risk": "success",
   "Medium Risk": "warning",
   "High Risk": "danger",
 }
 
-const validationTone: Record<Invoice["validationStatus"], StatusTone> = {
-  Parsed: "default",
-  Validated: "success",
-  "Mismatch Detected": "danger",
-  "Missing Information": "warning",
+function supplierName(suppliers: Supplier[], supplierId: string) {
+  return (
+    suppliers.find((supplier) => supplier.id === supplierId)?.name ??
+    "Unknown supplier"
+  )
 }
 
-const approvalLanes: Array<{
-  state: Invoice["approvalState"]
-  title: string
-  description: string
-  accent: string
-}> = [
-  {
-    state: "Waiting Approval",
-    title: "Waiting Approval",
-    description: "Clean invoices ready for final review.",
-    accent: "#8B5CF6",
-  },
-  {
-    state: "Needs Review",
-    title: "Needs Review",
-    description: "Mismatch or validation issue needs attention.",
-    accent: "#F59E0B",
-  },
-  {
-    state: "Blocked",
-    title: "Blocked",
-    description: "Cannot approve until the issue is cleared.",
-    accent: "#EF4444",
-  },
-]
+function invoiceTab(invoice: Invoice): InvoiceTab {
+  if (invoice.approvalState === "Completed") return "completed"
+  if (invoice.approvalState === "Blocked") return "issue"
+  if (invoice.approvalState === "Needs Review") return "review"
+  return "ready"
+}
+
+function invoiceStatusLabel(invoice: Invoice) {
+  if (invoice.approvalState === "Blocked") return "Issue Found"
+  if (invoice.approvalState === "Needs Review") return "Needs Review"
+  if (invoice.approvalState === "Completed") return "Completed"
+  return "Ready for Approval"
+}
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
   day: "numeric",
@@ -64,13 +62,6 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
   timeZone: "UTC",
 })
 
-function supplierName(suppliers: Supplier[], supplierId: string) {
-  return (
-    suppliers.find((supplier) => supplier.id === supplierId)?.name ??
-    "Unknown supplier"
-  )
-}
-
 export function InvoiceBoard({ invoices, suppliers }: InvoiceBoardProps) {
   const [query, setQuery] = useState("")
   const [riskFilter, setRiskFilter] = useState("all")
@@ -79,19 +70,12 @@ export function InvoiceBoard({ invoices, suppliers }: InvoiceBoardProps) {
     const keyword = query.trim().toLowerCase()
     return invoices.filter((invoice) => {
       const haystack = [
-        invoice.id,
         invoice.invoiceNumber,
-        invoice.workflowId,
-        invoice.approvalState,
-        invoice.validationStatus,
-        invoice.riskLevel,
         invoice.currency,
         invoice.amount.toString(),
-        invoice.orderId ?? "",
-        invoice.orderStatus ?? "",
-        invoice.workflowState ?? "",
         invoice.linkedSkus.join(" "),
         supplierName(suppliers, invoice.supplierId),
+        invoiceStatusLabel(invoice),
       ]
         .join(" ")
         .toLowerCase()
@@ -102,87 +86,114 @@ export function InvoiceBoard({ invoices, suppliers }: InvoiceBoardProps) {
     })
   }, [invoices, query, riskFilter, suppliers])
 
+  const tabs: Array<{ value: InvoiceTab; label: string }> = [
+    { value: "ready", label: "Ready for Approval" },
+    { value: "review", label: "Needs Review" },
+    { value: "issue", label: "Issue Found" },
+    { value: "completed", label: "Completed" },
+  ]
+
   return (
-    <>
-      <FilterToolbar
-        searchPlaceholder="Search invoices, suppliers, SKU, workflow, amount, or approval state..."
-        searchValue={query}
-        onSearchChange={setQuery}
-        filterLabel="Invoice risk"
-        filterValue={riskFilter}
-        onFilterChange={setRiskFilter}
-        filterOptions={[
-          { label: "All risk levels", value: "all" },
-          { label: "Low risk", value: "Low Risk" },
-          { label: "Medium risk", value: "Medium Risk" },
-          { label: "High risk", value: "High Risk" },
-        ]}
-      />
+    <Tabs defaultValue="ready" className="gap-4">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <TabsList
+          variant="line"
+          className="w-full justify-start gap-2 overflow-x-auto rounded-2xl border border-[#243047] bg-[#111827] p-2"
+        >
+          {tabs.map((tab) => {
+            const count = filteredInvoices.filter((invoice) => invoiceTab(invoice) === tab.value)
+              .length
+            return (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="rounded-xl px-4 py-2 text-[#94A3B8] data-active:bg-[#172033] data-active:text-[#F8FAFC]"
+              >
+                {tab.label} ({count})
+              </TabsTrigger>
+            )
+          })}
+        </TabsList>
 
-      <section className="grid grid-cols-3 gap-4">
-        {approvalLanes.map((lane) => {
-          const invoicesByLane = filteredInvoices.filter(
-            (invoice) => invoice.approvalState === lane.state
-          )
+        <div className="xl:min-w-[360px]">
+          <FilterToolbar
+            searchPlaceholder="Search invoices, suppliers, or SKU..."
+            searchValue={query}
+            onSearchChange={setQuery}
+            filterLabel="Risk"
+            filterValue={riskFilter}
+            onFilterChange={setRiskFilter}
+            filterOptions={[
+              { label: "All risk levels", value: "all" },
+              { label: "Low risk", value: "Low Risk" },
+              { label: "Medium risk", value: "Medium Risk" },
+              { label: "High risk", value: "High Risk" },
+            ]}
+          />
+        </div>
+      </div>
 
-          return (
-            <Card
-              key={lane.state}
-              className="min-h-[420px] rounded-[14px] border border-[#243047] border-t-4 bg-[#111827] py-0 shadow-none ring-0 transition hover:border-[#3B82F6]/60"
-              style={{ borderTopColor: lane.accent }}
-            >
+      {tabs.map((tab) => {
+        const invoicesByTab = filteredInvoices.filter(
+          (invoice) => invoiceTab(invoice) === tab.value
+        )
+
+        return (
+          <TabsContent key={tab.value} value={tab.value}>
+            <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
               <CardContent className="p-0">
-                <div className="border-b border-[#243047] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-[18px] font-semibold text-[#E5E7EB]">
-                        {lane.title}
-                      </h2>
-                      <p className="mt-2 min-h-10 text-[13px] leading-5 text-[#9CA3AF]">
-                        {lane.description}
-                      </p>
-                    </div>
-                    <span
-                      className="rounded-[10px] border px-3 py-1 text-[13px] font-semibold"
-                      style={{
-                        borderColor: `${lane.accent}66`,
-                        backgroundColor: `${lane.accent}1A`,
-                        color: lane.accent,
-                      }}
-                    >
-                      {invoicesByLane.length}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-3 p-3">
-                  {invoicesByLane.length > 0 ? (
-                    invoicesByLane.map((invoice) => (
-                      <InvoiceWorkCard
-                        key={invoice.id}
-                        invoice={invoice}
-                        suppliers={suppliers}
-                      />
-                    ))
-                  ) : (
-                    <EmptyState
-                      icon={Inbox}
-                      title="No invoices"
-                      description="This queue is clear with the current filters."
-                      compact
-                    />
-                  )}
-                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[#243047] hover:bg-transparent">
+                      <TableHead className="px-5 text-[12px] text-[#9CA3AF]">
+                        Supplier
+                      </TableHead>
+                      <TableHead className="text-[12px] text-[#9CA3AF]">
+                        Invoice
+                      </TableHead>
+                      <TableHead className="text-[12px] text-[#9CA3AF]">
+                        Amount
+                      </TableHead>
+                      <TableHead className="text-[12px] text-[#9CA3AF]">
+                        Status
+                      </TableHead>
+                      <TableHead className="text-[12px] text-[#9CA3AF]">
+                        Risk
+                      </TableHead>
+                      <TableHead className="text-[12px] text-[#9CA3AF]">
+                        Updated
+                      </TableHead>
+                      <TableHead className="text-right text-[12px] text-[#9CA3AF]">
+                        Action
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invoicesByTab.map((invoice) => (
+                      <InvoiceRow key={invoice.id} invoice={invoice} suppliers={suppliers} />
+                    ))}
+                    {invoicesByTab.length === 0 ? (
+                      <TableRow className="border-[#243047] hover:bg-transparent">
+                        <TableCell
+                          colSpan={7}
+                          className="px-5 py-10 text-center text-[14px] text-[#9CA3AF]"
+                        >
+                          No invoices in this view.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
-          )
-        })}
-      </section>
-    </>
+          </TabsContent>
+        )
+      })}
+    </Tabs>
   )
 }
 
-function InvoiceWorkCard({
+function InvoiceRow({
   invoice,
   suppliers,
 }: {
@@ -194,156 +205,69 @@ function InvoiceWorkCard({
     invoice.processingStatus === "idle" &&
     (!invoice.extractedText || !invoice.aiLastAnalyzedAt)
 
-  useEffect(() => {
-    if (invoice.processingStatus === "extracting") {
-      setLocalProcessingLabel("Extracting...")
-      return
-    }
-
-    if (invoice.processingStatus === "analyzing") {
-      setLocalProcessingLabel("Analyzing...")
-      return
-    }
-
-    if (invoice.aiLastAnalyzedAt) {
-      setLocalProcessingLabel(null)
-    }
-  }, [invoice.aiLastAnalyzedAt, invoice.processingStatus])
-
   const processingLabel =
     invoice.processingStatus === "extracting"
-      ? "Extracting..."
+      ? "Preparing"
       : invoice.processingStatus === "analyzing"
-        ? "Analyzing..."
-        : localProcessingLabel
-  const isProcessing = Boolean(processingLabel)
-  const processingDescription =
-    processingLabel === "Extracting..."
-      ? "OCR is extracting invoice text and repairing core fields from the uploaded file."
-      : processingLabel === "Analyzing..."
-        ? "Text extraction is complete. AI validation and risk analysis are running now."
-        : null
-  const amountLabel =
-    isProcessing && invoice.amount === 0
-      ? "Awaiting OCR"
-      : `${invoice.currency} ${invoice.amount.toLocaleString("en-US")}`
+        ? "Checking"
+        : invoice.aiLastAnalyzedAt
+          ? null
+          : localProcessingLabel
 
   return (
-    <article className="rounded-[12px] border border-[#243047] bg-[#172033] p-4 transition hover:border-[#3B82F6]/70 hover:bg-[#1B263C]">
-      <InvoiceProcessingTrigger
-        invoiceId={invoice.id}
-        shouldProcess={shouldProcessInvoice}
-        processingStatus={invoice.processingStatus}
-        onStarted={() => {
-          setLocalProcessingLabel(
-            invoice.extractedText ? "Analyzing..." : "Extracting..."
-          )
-        }}
-        onCompleted={(ok) => {
-          if (!ok) {
-            setLocalProcessingLabel(null)
-          }
-        }}
-      />
-
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[15px] font-semibold text-[#E5E7EB]">
-            {invoice.id}
-          </p>
-          <p className="mt-1 text-[13px] leading-5 text-[#9CA3AF]">
-            {supplierName(suppliers, invoice.supplierId)}
-          </p>
-        </div>
-        <p className="text-right text-[15px] font-semibold text-[#E5E7EB]">
-          {amountLabel}
+    <TableRow className="border-[#243047] hover:bg-[#172033]/70">
+      <TableCell className="px-5 py-4">
+        <InvoiceProcessingTrigger
+          invoiceId={invoice.id}
+          shouldProcess={shouldProcessInvoice}
+          processingStatus={invoice.processingStatus}
+          onStarted={() => {
+            setLocalProcessingLabel(invoice.extractedText ? "Checking" : "Preparing")
+          }}
+          onCompleted={(ok) => {
+            if (!ok) {
+              setLocalProcessingLabel(null)
+            }
+          }}
+        />
+        <p className="text-[15px] font-medium text-[#E5E7EB]">
+          {supplierName(suppliers, invoice.supplierId)}
         </p>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {processingLabel ? (
-          <StatusBadge label={processingLabel} tone="ai" />
-        ) : null}
-        {!isProcessing ? (
-          <>
-            <StatusBadge
-              label={invoice.riskLevel}
-              tone={riskTone[invoice.riskLevel]}
-            />
-            <StatusBadge
-              label={invoice.validationStatus}
-              tone={validationTone[invoice.validationStatus]}
-            />
-          </>
-        ) : null}
-      </div>
-
-      {isProcessing ? (
-        <div className="mt-4 rounded-[10px] border border-[#1D4ED8]/40 bg-[#0F1D3A] p-3">
-          <p className="text-[13px] font-medium text-[#BFDBFE]">
-            Invoice processing in progress
-          </p>
-          <p className="mt-2 text-[13px] leading-5 text-[#DBEAFE]">
-            {processingDescription}
-          </p>
-        </div>
-      ) : null}
-
-      <div className="mt-4 grid grid-cols-2 gap-3 rounded-[10px] bg-[#0B1020] p-3">
-        <div>
-          <p className="text-[13px] text-[#6B7280]">Workflow</p>
-          <p className="mt-1 text-[13px] font-medium text-[#E5E7EB]">
-            {invoice.workflowId}
-          </p>
-        </div>
-        <div>
-          <p className="text-[13px] text-[#6B7280]">Updated</p>
-          <p className="mt-1 text-[13px] font-medium text-[#E5E7EB]">
-            {dateFormatter.format(new Date(invoice.lastUpdated))}
-          </p>
-        </div>
-        <div>
-          <p className="text-[13px] text-[#6B7280]">Submitted Order</p>
-          <p className="mt-1 text-[13px] font-medium text-[#E5E7EB]">
-            {invoice.orderId
-              ? `${invoice.orderId}${invoice.orderStatus ? ` · ${invoice.orderStatus}` : ""}`
-              : invoice.workflowId ? "Pending negotiation" : "Not linked (Direct upload)"}
-          </p>
-        </div>
-        <div>
-          <p className="text-[13px] text-[#6B7280]">Workflow State</p>
-          <p className="mt-1 text-[13px] font-medium text-[#E5E7EB]">
-            {invoice.workflowState ?? "Awaiting workflow sync"}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {invoice.linkedSkus.map((sku) => (
-          <Link key={sku} href={`/inventory/${sku}`}>
-            <StatusBadge
-              label={sku}
-              tone="default"
-              className="hover:border-[#3B82F6] hover:text-[#93C5FD]"
-            />
-          </Link>
-        ))}
-      </div>
-
-      {!isProcessing ? (
+        <p className="mt-1 text-[12px] text-[#6B7280]">
+          {invoice.linkedSkus[0] ?? "Direct upload"}
+        </p>
+      </TableCell>
+      <TableCell className="py-4">
+        <p className="text-[14px] font-medium text-[#E5E7EB]">{invoice.invoiceNumber}</p>
+        <p className="mt-1 text-[12px] text-[#6B7280]">{invoice.fileName}</p>
+      </TableCell>
+      <TableCell className="py-4 text-[14px] font-medium text-[#E5E7EB]">
+        {invoice.currency} {invoice.amount.toLocaleString("en-US")}
+      </TableCell>
+      <TableCell className="py-4">
+        <StatusBadge
+          label={processingLabel ?? invoiceStatusLabel(invoice)}
+          tone={processingLabel ? "ai" : invoice.approvalState === "Blocked" ? "danger" : invoice.approvalState === "Needs Review" ? "warning" : invoice.approvalState === "Completed" ? "success" : "ai"}
+        />
+      </TableCell>
+      <TableCell className="py-4">
+        <StatusBadge label={invoice.riskLevel} tone={riskTone[invoice.riskLevel]} />
+      </TableCell>
+      <TableCell className="py-4 text-[13px] text-[#9CA3AF]">
+        {dateFormatter.format(new Date(invoice.lastUpdated))}
+      </TableCell>
+      <TableCell className="py-4 text-right">
         <Button
           asChild
-          className="mt-4 h-9 w-full rounded-[10px] bg-[#111827] text-[#E5E7EB] hover:bg-[#243047]"
+          variant="outline"
+          className="h-8 rounded-[10px] border-[#243047] bg-[#172033] text-[#E5E7EB] hover:bg-[#243047]"
         >
-          <Link
-            href={`/invoice-management/${invoice.id}`}
-            className="flex items-center justify-center gap-2"
-          >
-            Open Invoice
-            <ArrowRight className="h-4 w-4" />
+          <Link href={`/invoice-management/${invoice.id}`} className="inline-flex items-center gap-2">
+            Open
+            <ArrowRight className="size-4" aria-hidden="true" />
           </Link>
         </Button>
-      ) : null}
-    </article>
+      </TableCell>
+    </TableRow>
   )
 }

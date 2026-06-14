@@ -220,8 +220,7 @@ export function SuppliersManager({
               Supplier Registry
             </CardTitle>
             <p className="mt-1 text-[13px] leading-5 text-[#9CA3AF]">
-              {suppliers.length} suppliers · click a row to manage SKU
-              assignments for that supplier.
+              {suppliers.length} suppliers · open a row to manage product coverage.
             </p>
           </div>
         </div>
@@ -270,7 +269,7 @@ export function SuppliersManager({
             <SupplierDialog
               key="create-supplier"
               title="Add new supplier"
-              description="Seed the supplier in the registry, then assign SKUs from the row that appears in the list."
+              description="Add the supplier now and assign products after save."
               onSubmit={handleAddSupplier}
               pending={isPending}
               actionError={error}
@@ -397,7 +396,7 @@ export function SuppliersManager({
                               <SupplierDialog
                                 key={supplier.id}
                                 title="Edit supplier"
-                                description="Update supplier profile details and save the manual status."
+                                description="Update supplier details and save changes."
                                 initialValues={{
                                   supplierId: supplier.id,
                                   name: supplier.name,

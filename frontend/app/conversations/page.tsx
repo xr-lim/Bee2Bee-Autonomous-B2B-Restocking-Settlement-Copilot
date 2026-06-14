@@ -22,7 +22,7 @@ export default async function ConversationsPage() {
       <PageHeader
         eyebrow="Supplier desk"
         title="Conversations"
-        description="Track AI supplier negotiation progress, linked SKUs, and invoice follow-up."
+        description="Follow supplier discussions, replies, and invoice handoff."
       />
 
       <ConversationsBrowser

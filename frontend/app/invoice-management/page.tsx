@@ -16,7 +16,7 @@ export default async function InvoiceManagementPage() {
       <PageHeader
         eyebrow="Finance operations"
         title="Invoice Management"
-        description="Monitor supplier invoices created from negotiation and track validation, risk, and approval progress."
+        description="Review supplier invoices and move them through approval and payment."
         actions={
           <div className="flex flex-wrap items-start justify-end gap-2">
             <Button

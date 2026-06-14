@@ -27,6 +27,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { useCallback, useMemo, useState, useEffect, useRef, useTransition } from "react"
 import { io } from "socket.io-client"
 
+import { CollapsibleSection } from "@/components/shared/collapsible-section"
 import { StatusBadge } from "@/components/shared/status-badge"
 import {
   resumeConversationAiAction,
@@ -255,6 +256,18 @@ export function ConversationWorkspace({
   const [isStoppingAi, startStoppingAi] = useTransition()
   const [isResumingAi, startResumingAi] = useTransition()
   const [isSendingManualMessage, startSendingManualMessage] = useTransition()
+
+  const currentStep = useMemo(() => {
+    if (conversation.linkedInvoiceId) {
+      return "Invoice received"
+    }
+    if (conversation.submittedOrderId) {
+      return "Order confirmed"
+    }
+    return conversation.negotiationState
+  }, [conversation])
+
+  const suggestedAction = conversation.nextAction.recommendedNextStep
 
   const isConversationComplete = useMemo(() => {
     const stateRaw =
@@ -923,12 +936,12 @@ export function ConversationWorkspace({
 
   return (
     <>
-      <section className="grid grid-cols-[300px_1fr] gap-6">
+      <section className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
             <CardHeader className="border-b border-[#243047] p-4">
               <CardTitle className="text-[18px] font-semibold text-[#E5E7EB]">
-                Conversation Summary
+                Deal Summary
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 p-4">
@@ -936,18 +949,12 @@ export function ConversationWorkspace({
                 label="Supplier"
                 value={supplier?.name ?? "Unknown supplier"}
               />
-              <InfoRow
-                label="Preferred Language"
-                value={supplierPreferredLanguageLabel}
-              />
-              <InfoRow
-                label="Source Type"
-                value={displayConversationSource(conversation.source)}
-              />
+              <InfoRow label="Language" value={supplierPreferredLanguageLabel} />
+              <InfoRow label="Current Step" value={currentStep} />
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[13px] text-[#9CA3AF]">
-                    Target Price Range
+                    Target Price
                   </p>
                   {!isPriceRangeEditing ? (
                     <Button
@@ -1040,20 +1047,67 @@ export function ConversationWorkspace({
                 ) : null}
               </div>
               <InfoRow
-                label="Created Date"
-                value={conversation.createdDate}
+                label="Suggested Action"
+                value={suggestedAction}
               />
               <div>
-                <p className="text-[13px] text-[#9CA3AF]">Current State</p>
-                <div className="mt-2">
-                  <StatusBadge
-                    label={conversation.negotiationState}
-                    tone={stateTone[conversation.negotiationState]}
-                  />
-                </div>
+                <StatusBadge
+                  label={conversation.negotiationState}
+                  tone={stateTone[conversation.negotiationState]}
+                />
               </div>
+            </CardContent>
+          </Card>
+
+          <CollapsibleSection
+            title="Order Items"
+            description="Products included in this supplier discussion."
+            defaultOpen
+          >
+            <div className="space-y-3 p-4">
+              {linkedProducts.map((product) => (
+                <div
+                  key={product.sku}
+                  className="rounded-[10px] border border-[#243047] bg-[#172033] p-3"
+                >
+                  <p className="text-[15px] font-medium text-[#E5E7EB]">
+                    {product.name}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Link key={product.sku} href={`/inventory/${product.sku}`}>
+                      <StatusBadge
+                        label={product.sku}
+                        tone="default"
+                        className="hover:border-[#3B82F6] hover:text-[#93C5FD]"
+                      />
+                    </Link>
+                    <StatusBadge
+                      label={`Stock ${product.stockOnHand}`}
+                      tone="default"
+                    />
+                    <StatusBadge
+                      label={`Reorder point ${product.currentThreshold}`}
+                      tone="default"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="More Details"
+            description="Additional workflow details for this conversation."
+            defaultOpen={false}
+          >
+            <div className="space-y-4 p-4">
+              <InfoRow
+                label="Channel"
+                value={displayConversationSource(conversation.source)}
+              />
+              <InfoRow label="Started" value={conversation.createdDate} />
               <div>
-                <p className="text-[13px] text-[#9CA3AF]">Linked SKU IDs</p>
+                <p className="text-[13px] text-[#9CA3AF]">Linked SKUs</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {conversation.linkedSkus.map((sku) => (
                     <Link key={sku} href={`/inventory/${sku}`}>
@@ -1066,56 +1120,33 @@ export function ConversationWorkspace({
                   ))}
                 </div>
               </div>
-              <div>
-                <p className="text-[13px] text-[#9CA3AF]">Linked Products</p>
-                <div className="mt-2 space-y-2">
-                  {linkedProducts.map((product) => (
-                    <p
-                      key={product.sku}
-                      className="text-[15px] text-[#E5E7EB]"
-                    >
-                      {product.name}
-                    </p>
-                  ))}
-                </div>
+            </div>
+          </CollapsibleSection>
+        </aside>
+
+        <main className="space-y-4">
+          <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
+            <CardContent className="grid gap-3 p-4 md:grid-cols-2">
+              <div className="rounded-[12px] border border-[#243047] bg-[#172033] p-4">
+                <p className="text-[12px] uppercase tracking-[0.18em] text-[#64748B]">
+                  Current Step
+                </p>
+                <p className="mt-2 text-[17px] font-semibold text-[#E5E7EB]">
+                  {currentStep}
+                </p>
+              </div>
+              <div className="rounded-[12px] border border-[#243047] bg-[#172033] p-4">
+                <p className="text-[12px] uppercase tracking-[0.18em] text-[#64748B]">
+                  Suggested Action
+                </p>
+                <p className="mt-2 text-[15px] leading-6 text-[#E5E7EB]">
+                  {suggestedAction}
+                </p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-            <CardHeader className="border-b border-[#243047] p-4">
-              <CardTitle className="text-[18px] font-semibold text-[#E5E7EB]">
-                Linked Product Panel
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 p-4">
-              {linkedProducts.map((product) => (
-                <div
-                  key={product.sku}
-                  className="rounded-[10px] border border-[#243047] bg-[#172033] p-3"
-                >
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-[15px] font-medium text-[#E5E7EB]">
-                        {product.sku}
-                      </p>
-                      <p className="text-[13px] text-[#9CA3AF]">
-                        {product.name}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-[13px] text-[#9CA3AF]">
-                    <span>Stock: {product.stockOnHand}</span>
-                    <span>Threshold: {product.currentThreshold}</span>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </aside>
-
-        <main>
-          <Card className="flex h-[1300px] flex-col rounded-[14px] border border-[#243047] bg-[#0F1728] py-0 shadow-none ring-0">
+          <Card className="flex min-h-[900px] flex-col rounded-[14px] border border-[#243047] bg-[#0F1728] py-0 shadow-none ring-0">
             <CardHeader className="shrink-0 border-b border-[#243047] p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -1124,20 +1155,20 @@ export function ConversationWorkspace({
                   </CardTitle>
                   <p className="mt-1 text-[13px] text-[#9CA3AF]">
                     {manualTakeoverActive
-                      ? `Admin manual takeover with ${supplier?.name}`
-                      : `AI negotiating autonomously with ${supplier?.name}`}
+                      ? `Manual reply mode with ${supplier?.name}`
+                      : `Live supplier thread with ${supplier?.name}`}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <StatusBadge
                     label={
                       isConversationComplete
-                        ? "Negotiation Complete"
+                        ? "Completed"
                         : manualTakeoverActive
-                          ? "Manual Takeover"
+                          ? "Manual Reply"
                         : isNegotiating || isWaitingForAI
-                          ? "Negotiation Active"
-                          : conversation.negotiationState
+                          ? "In Progress"
+                        : conversation.negotiationState
                     }
                     tone={
                       isConversationComplete
@@ -1186,19 +1217,17 @@ export function ConversationWorkspace({
 
             <CardContent className="flex min-h-0 flex-1 flex-col p-0">
               {supplierPreferredLanguage !== "en" ? (
-                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#243047] bg-[#8B5CF6]/5 px-5 py-2.5">
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#243047] bg-[#8B5CF6]/5 px-4 py-2.5">
                   <div className="flex items-center gap-2">
                     <Languages
                       className="size-4 text-[#C4B5FD]"
                       aria-hidden="true"
                     />
                     <span className="text-[13px] text-[#E5E7EB]">
-                      Supplier communicates in{" "}
+                      Supplier language:{" "}
                       <span className="font-semibold text-[#C4B5FD]">
                         {supplierPreferredLanguageLabel}
                       </span>
-                      . AI will reply in{" "}
-                      {aiAutoTranslateEnabled ? "that language" : "English"}.
                     </span>
                   </div>
                   <button
@@ -1213,15 +1242,15 @@ export function ConversationWorkspace({
                         : "border-[#243047] bg-[#111827] text-[#9CA3AF] hover:bg-[#172033]"
                     )}
                     aria-pressed={aiAutoTranslateEnabled}
-                  >
-                    <span
-                      className={cn(
-                        "size-2 rounded-full",
-                        aiAutoTranslateEnabled ? "bg-[#8B5CF6]" : "bg-[#6B7280]"
-                      )}
-                      aria-hidden="true"
-                    />
-                    AI translation {aiAutoTranslateEnabled ? "ON" : "OFF"}
+                    >
+                      <span
+                        className={cn(
+                          "size-2 rounded-full",
+                          aiAutoTranslateEnabled ? "bg-[#8B5CF6]" : "bg-[#6B7280]"
+                        )}
+                        aria-hidden="true"
+                      />
+                    Translate replies {aiAutoTranslateEnabled ? "ON" : "OFF"}
                   </button>
                 </div>
               ) : null}
@@ -1263,7 +1292,7 @@ export function ConversationWorkspace({
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] font-medium text-[#E5E7EB]">
-                        Admin Manual Message
+                        Manual Message
                       </span>
                       <StatusBadge
                         label={isConversationComplete ? "Post-completion" : "AI Stopped"}
@@ -1294,7 +1323,7 @@ export function ConversationWorkspace({
                           aria-hidden="true"
                         />
                         <span className="text-[13px] text-[#E5E7EB]">
-                          Manual message will send in{" "}
+                          Send manual reply in{" "}
                           <span className="font-semibold text-[#C4B5FD]">
                             {manualTranslateEnabled
                               ? supplierPreferredLanguageLabel
@@ -1323,7 +1352,7 @@ export function ConversationWorkspace({
                           )}
                           aria-hidden="true"
                         />
-                        Manual translation {manualTranslateEnabled ? "ON" : "OFF"}
+                        Translate message {manualTranslateEnabled ? "ON" : "OFF"}
                       </button>
                     </div>
                   ) : null}
@@ -1365,7 +1394,7 @@ export function ConversationWorkspace({
               <div className="shrink-0 border-t border-[#243047] bg-[#0B1020] p-4">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <span className="text-[13px] font-medium text-[#9CA3AF]">
-                    Test Supplier Reply
+                    Demo Supplier Reply
                   </span>
                   <StatusBadge label="Development Mode" tone="warning" />
                   {manualTakeoverActive ? (

@@ -137,7 +137,7 @@ export function InventoryTableClient({
   return (
     <div className="space-y-4">
       <FilterToolbar
-        searchPlaceholder="Search by SKU, product, supplier, category, or stock status..."
+        searchPlaceholder="Search products, suppliers, category, or stock status..."
         searchValue={query}
         onSearchChange={setQuery}
         filterLabel="Stock status"
@@ -159,8 +159,7 @@ export function InventoryTableClient({
             Stock list
           </p>
           <p className="mt-0.5 text-[12px] text-[#9CA3AF]">
-            {filteredProducts.length} of {products.length} SKUs shown · current
-            threshold tuned on 30/90/365-day signals.
+            {filteredProducts.length} of {products.length} products shown.
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -238,7 +237,7 @@ export function InventoryTableClient({
                         </p>
                         {product.pendingAiAnalysis ? (
                           <StatusBadge
-                            label="Pending AI analysis"
+                            label="Recommendation pending"
                             tone="ai"
                           />
                         ) : null}
@@ -477,10 +476,9 @@ function AddProductDialog({
         <div className="flex items-start gap-2 rounded-[10px] border border-[#8B5CF6]/30 bg-[#8B5CF6]/5 p-3">
           <Sparkles className="size-4 shrink-0 text-[#C4B5FD]" aria-hidden="true" />
           <p className="text-[12px] leading-5 text-[#C4B5FD]">
-            After save, the SKU lands in the list flagged{" "}
-            <span className="font-semibold">Pending AI analysis</span>. Once 7
-            days of velocity data are available, AI will submit a refined
-            threshold to the review queue.
+            After save, the product will appear as{" "}
+            <span className="font-semibold">Recommendation pending</span> until
+            Bee2Bee has enough stock history to suggest a reorder point.
           </p>
         </div>
 

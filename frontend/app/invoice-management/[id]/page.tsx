@@ -280,7 +280,7 @@ export default async function InvoiceDetailPage({
           <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
             <CardHeader className="border-b border-[#243047] p-4">
               <CardTitle className="text-[18px] font-semibold text-[#E5E7EB]">
-                Validation Result
+                Check Result
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -348,7 +348,7 @@ export default async function InvoiceDetailPage({
               </Table>
               <div className="border-t border-[#243047] p-4">
                 <p className="text-[13px] font-medium text-[#9CA3AF]">
-                  Mismatch List
+                  Issues to Review
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {invoice.mismatches.length > 0 ? (
@@ -397,7 +397,7 @@ export default async function InvoiceDetailPage({
               ) : null}
               <div className="rounded-[12px] border border-[#243047] bg-[#172033] p-4">
                 <p className="text-[13px] font-medium text-[#9CA3AF]">
-                  Issues detected
+                  Review summary
                 </p>
                 {invoice.issueSummaries.length > 0 ? (
                   <ul className="mt-3 space-y-2 text-[14px] leading-6 text-[#E5E7EB]">
@@ -415,7 +415,7 @@ export default async function InvoiceDetailPage({
                   </ul>
                 ) : (
                   <p className="mt-2 text-[14px] leading-6 text-[#86EFAC]">
-                    No AI issues detected.
+                    No issues detected.
                   </p>
                 )}
               </div>

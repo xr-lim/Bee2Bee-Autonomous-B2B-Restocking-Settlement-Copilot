@@ -15,7 +15,7 @@ export default async function SuppliersPage() {
       <PageHeader
         eyebrow="Supplier management"
         title="Suppliers"
-        description="Maintain the supplier registry, assign SKUs, and keep lead time & reliability signals visible for every negotiation."
+        description="Manage supplier records and product assignments."
       />
 
       <SuppliersManager

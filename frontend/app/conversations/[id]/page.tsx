@@ -69,7 +69,7 @@ export default async function ConversationDetailPage({
       <PageHeader
         eyebrow="Conversation workspace"
         title={conversation.subject}
-        description={`${conversation.id} / ${supplier?.name ?? "Unknown supplier"}`}
+        description={supplier?.name ?? "Unknown supplier"}
         actions={
           <>
             <Button
@@ -213,7 +213,7 @@ function PriorityBrief({
             </span>
             <span className="text-[13px] text-[#9CA3AF]">
               {reasons.length} signal{reasons.length > 1 ? "s" : ""} detected
-              by AI
+              to review
             </span>
           </div>
           <ul className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2">

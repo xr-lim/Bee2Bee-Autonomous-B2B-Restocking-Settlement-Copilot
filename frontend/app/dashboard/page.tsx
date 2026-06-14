@@ -2,27 +2,17 @@ import Link from "next/link"
 import {
   AlertTriangle,
   ArrowRight,
-  Bot,
-  CheckCircle2,
-  FileCheck2,
   FileWarning,
   MessageSquareText,
-  PackageCheck,
   PackageSearch,
-  Receipt,
-  Sparkles,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 import { PageHeader } from "@/components/layout/page-header"
-import { CollapsibleSection } from "@/components/shared/collapsible-section"
-import { DashboardThresholdAnalysisButton } from "@/components/shared/dashboard-threshold-analysis-button"
-import { DashboardRestockRowActions } from "@/components/shared/dashboard-restock-row-actions"
-import { DashboardCharts } from "@/components/shared/dashboard-charts"
 import { StatCard } from "@/components/shared/stat-card"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -32,10 +22,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  getInsightCards,
+  getConversations,
   getInvoices,
   getRestockRecommendations,
-  getStockTrendData,
   getSuppliers,
 } from "@/lib/data"
 import type { Invoice, StatusTone, Supplier } from "@/lib/types"
@@ -49,10 +38,13 @@ const approvalTone: Record<Invoice["approvalState"], StatusTone> = {
   Completed: "success",
 }
 
-const riskTone: Record<Invoice["riskLevel"], StatusTone> = {
-  "Low Risk": "success",
-  "Medium Risk": "warning",
-  "High Risk": "danger",
+type PriorityItem = {
+  id: string
+  label: string
+  summary: string
+  status: string
+  tone: StatusTone
+  href: string
 }
 
 function supplierName(suppliers: Supplier[], supplierId: string) {
@@ -62,45 +54,54 @@ function supplierName(suppliers: Supplier[], supplierId: string) {
   )
 }
 
-function firstSentence(text: string) {
-  const match = text.match(/^(.*?[.?!])(\s|$)/)
-  return match ? match[1] : text
+function restockStatusLabel(
+  item: Awaited<ReturnType<typeof getRestockRecommendations>>[number]
+) {
+  if (item.restockRequestStatus === "accepted") {
+    return item.workflowState === "completed" ? "Completed" : "In progress"
+  }
+
+  if (item.restockRequestStatus === "reviewed") {
+    return "Needs attention"
+  }
+
+  return "Restock needed"
+}
+
+function restockStatusTone(
+  item: Awaited<ReturnType<typeof getRestockRecommendations>>[number]
+): StatusTone {
+  if (item.restockRequestStatus === "accepted") {
+    return item.workflowState === "completed" ? "success" : "ai"
+  }
+
+  return item.currentStock < item.currentThreshold ? "warning" : "default"
 }
 
 export default async function DashboardPage() {
-  const [
-    insightCards,
-    invoices,
-    suppliers,
-    restockRecommendations,
-    stockTrendData,
-  ] = await Promise.all([
-    getInsightCards(),
-    getInvoices(),
-    getSuppliers(),
-    getRestockRecommendations(),
-    getStockTrendData(),
-  ])
+  const [conversations, invoices, suppliers, restockRecommendations] =
+    await Promise.all([
+      getConversations(),
+      getInvoices(),
+      getSuppliers(),
+      getRestockRecommendations(),
+    ])
 
-  const activeInvoices = invoices.filter((invoice) =>
-    ["Waiting Approval", "Needs Review", "Blocked"].includes(invoice.approvalState)
+  const restockNeeded = restockRecommendations.filter(
+    (item) =>
+      item.restockRequestStatus === "pending" ||
+      item.restockRequestStatus === "reviewed"
   )
-  const riskyInvoices = activeInvoices.filter(
-    (invoice) => invoice.riskLevel === "High Risk" || invoice.riskLevel === "Medium Risk"
+  const newSupplierMessages = conversations.filter(
+    (conversation) =>
+      conversation.negotiationState === "Needs Analysis" ||
+      conversation.negotiationState === "Escalated" ||
+      conversation.negotiationState === "Waiting Reply"
   )
-  const actionableRestocks = restockRecommendations.filter((item) =>
-    isActionableRestock(item)
+  const invoicesNeedingAttention = invoices.filter(
+    (invoice) => invoice.approvalState !== "Completed"
   )
-  const pendingRestocks = restockRecommendations.filter((item) =>
-    item.restockRequestStatus === "pending" || item.restockRequestStatus === "reviewed"
-  )
-  const activeRestocks = restockRecommendations.filter(
-    (item) => item.restockRequestStatus === "accepted" && item.workflowState !== "completed"
-  )
-  const completedSettlements = invoices.filter(
-    (invoice) => invoice.approvalState === "Completed" || invoice.status === "paid"
-  )
-  const supplierReplyCount = insightCards.recentSupplierActivity.length
+
   const kpiCards: Array<{
     title: string
     value: string
@@ -109,67 +110,96 @@ export default async function DashboardPage() {
     icon: LucideIcon
   }> = [
     {
-      title: "Low Stock Items",
-      value: actionableRestocks.length.toString(),
-      change: `${activeRestocks.length} already in active recovery flow`,
-      tone: actionableRestocks.length > 0 ? "warning" : "success",
-      icon: AlertTriangle,
-    },
-    {
-      title: "Pending Restock",
-      value: pendingRestocks.length.toString(),
-      change: `${restockRecommendations.length} total recommendations in play`,
-      tone: pendingRestocks.length > 0 ? "ai" : "success",
+      title: "Restock Needed",
+      value: restockNeeded.length.toString(),
+      change:
+        restockNeeded.length > 0
+          ? "Products waiting for reorder review"
+          : "No urgent stock gaps right now",
+      tone: restockNeeded.length > 0 ? "warning" : "success",
       icon: PackageSearch,
     },
     {
-      title: "Supplier Replies",
-      value: supplierReplyCount.toString(),
-      change: "latest inbound messages ready for review",
-      tone: supplierReplyCount > 0 ? "default" : "success",
+      title: "New Supplier Messages",
+      value: newSupplierMessages.length.toString(),
+      change:
+        newSupplierMessages.length > 0
+          ? "Conversations waiting for a response"
+          : "No new supplier replies waiting",
+      tone: newSupplierMessages.length > 0 ? "ai" : "success",
       icon: MessageSquareText,
     },
     {
-      title: "Invoice Risks",
-      value: riskyInvoices.length.toString(),
-      change: `${activeInvoices.length} invoices still need action`,
-      tone: riskyInvoices.length > 0 ? "danger" : "success",
+      title: "Invoices Needing Attention",
+      value: invoicesNeedingAttention.length.toString(),
+      change:
+        invoicesNeedingAttention.length > 0
+          ? "Invoices still in review or payment"
+          : "All invoices are settled",
+      tone: invoicesNeedingAttention.length > 0 ? "danger" : "success",
       icon: FileWarning,
     },
   ]
 
+  const priorityQueue: PriorityItem[] = [
+    ...restockNeeded.slice(0, 3).map((item) => ({
+      id: item.id,
+      label: item.productName,
+      summary: `${item.supplier} · ${item.currentStock}/${item.currentThreshold} in stock · ${item.quantity.toLocaleString("en-US")} suggested`,
+      status: restockStatusLabel(item),
+      tone: restockStatusTone(item),
+      href:
+        item.restockRequestStatus === "accepted" && item.workflowId
+          ? `/inventory/${item.sku}`
+          : `/inventory/${item.sku}`,
+    })),
+    ...newSupplierMessages.slice(0, 3).map((conversation) => ({
+      id: conversation.id,
+      label: supplierName(suppliers, conversation.supplierId),
+      summary: `${conversation.linkedSkus[0] ?? "Supplier update"} · ${conversation.nextAction.recommendedNextStep}`,
+      status:
+        conversation.negotiationState === "Escalated"
+          ? "Needs attention"
+          : "New message",
+      tone:
+        conversation.negotiationState === "Escalated" ? "warning" : "ai",
+      href: `/conversations/${conversation.id}`,
+    })),
+    ...invoicesNeedingAttention.slice(0, 3).map((invoice) => ({
+      id: invoice.id,
+      label: supplierName(suppliers, invoice.supplierId),
+      summary: `${invoice.currency} ${invoice.amount.toLocaleString("en-US")} · ${invoice.invoiceNumber}`,
+      status:
+        invoice.approvalState === "Needs Review"
+          ? "Needs attention"
+          : invoice.approvalState === "Blocked"
+            ? "Issue found"
+            : "Ready for approval",
+      tone: approvalTone[invoice.approvalState],
+      href: `/invoice-management/${invoice.id}`,
+    })),
+  ].slice(0, 9)
+
   return (
     <>
       <PageHeader
-        eyebrow="Bee2Bee command center"
-        title="Restock Control Center"
-        description="Monitor stock health, supplier communication, invoice risk, and approval pipeline."
+        eyebrow="Bee2Bee overview"
+        title="Operations Dashboard"
+        description="See what needs action across stock, suppliers, and invoices."
         actions={
-          <>
-            <Button
-              asChild
-              variant="outline"
-              className="h-11 rounded-2xl border-[#334155] bg-[#101827]/70 px-4 text-[#E5E7EB] hover:border-[#38BDF8]/40 hover:bg-[#172033]"
-            >
-              <Link href="/conversations">
-                <MessageSquareText className="size-4" aria-hidden="true" />
-                Inbox
-              </Link>
-            </Button>
-            <Button
-              asChild
-              className="h-11 rounded-2xl bg-[#FACC15] px-4 font-semibold text-[#111827] hover:bg-[#EAB308]"
-            >
-              <Link href="#restock-queue">
-                <PackageCheck className="size-4" aria-hidden="true" />
-                Review Queue
-              </Link>
-            </Button>
-          </>
+          <Button
+            asChild
+            className="h-10 rounded-2xl bg-[#FACC15] px-4 font-semibold text-[#111827] hover:bg-[#EAB308]"
+          >
+            <Link href="#priority-queue">
+              Review priority queue
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          </Button>
         }
       />
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-3">
         {kpiCards.map((stat) => (
           <StatCard
             key={stat.title}
@@ -182,254 +212,193 @@ export default async function DashboardPage() {
         ))}
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[3.5fr_minmax(340px,1fr)]">
-        {/* Main Content: Queues */}
-        <div className="space-y-6">
-          <div id="restock-queue">
-            <CollapsibleSection
-              title="Restock Queue"
-              description="SKUs below current threshold · ordered by urgency."
-              headerAccessory={
-                <StatusBadge
-                  label={`${actionableRestocks.length} items`}
-                  tone={actionableRestocks.length > 0 ? "warning" : "default"}
-                />
-              }
-              defaultOpen
-            >
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-[#243047] hover:bg-transparent [&>th]:h-12 [&>th]:px-5 [&>th]:text-[13px] [&>th]:text-[#9CA3AF]">
-                      <TableHead>Product</TableHead>
-                      <TableHead>Supplier</TableHead>
-                      <TableHead>Stock / Threshold</TableHead>
-                      <TableHead>Quantity</TableHead>
-                      <TableHead>Target Price</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {actionableRestocks.map((item) => {
-                      const belowThreshold = item.currentStock < item.currentThreshold
-
-                      return (
-                        <TableRow
-                          key={item.id}
-                          className="border-[#243047] hover:bg-[#172033]/70 [&>td]:px-5 [&>td]:py-4"
-                        >
-                          <TableCell>
-                            <p className="text-[15px] font-medium text-[#E5E7EB]">
-                              {item.productName}
-                            </p>
-                            <div className="mt-1 flex items-center gap-2">
-                              <p className="font-mono text-[12px] text-[#6B7280]">
-                                {item.sku}
-                              </p>
-                              <StatusBadge
-                                label={restockQueueStatus(item).label}
-                                tone={restockQueueStatus(item).tone}
-                              />
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-[14px] text-[#9CA3AF]">
-                            {item.supplier}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-baseline gap-1.5">
-                              <span
-                                className={
-                                  belowThreshold
-                                    ? "text-[15px] font-semibold text-[#F87171]"
-                                    : "text-[15px] font-semibold text-[#E5E7EB]"
-                                }
-                              >
-                                {item.currentStock}
-                              </span>
-                              <span className="text-[13px] text-[#6B7280]">
-                                / {item.currentThreshold}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-[15px] font-medium text-[#E5E7EB]">
-                            {item.quantity.toLocaleString("en-US")}
-                          </TableCell>
-                          <TableCell className="text-[14px] text-[#9CA3AF]">
-                            {item.targetPrice}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <DashboardRestockRowActions
-                              sku={item.sku}
-                              requestId={item.restockRequestId}
-                              actionLabel={
-                                item.restockRequestStatus === "accepted"
-                                  ? "View restocking"
-                                  : "Review & restock"
-                              }
-                            />
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,2.25fr)_340px]">
+        <Card
+          id="priority-queue"
+          className="panel-surface rounded-3xl py-0 shadow-none ring-0"
+        >
+          <CardHeader className="border-b border-[#243047] px-5 py-4 sm:px-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-[20px] font-semibold text-[#F8FAFC]">
+                  Priority Queue
+                </CardTitle>
+                <p className="mt-1 text-[14px] text-[#94A3B8]">
+                  One place to review the next most important tasks.
+                </p>
               </div>
-            </CollapsibleSection>
-          </div>
-
-          <CollapsibleSection
-            title="Invoice Action Queue"
-            description="Invoices waiting on approval, review, or unblock action."
-            headerAccessory={
               <StatusBadge
-                label={`${activeInvoices.length} open`}
-                tone={activeInvoices.length > 0 ? "ai" : "default"}
+                label={`${priorityQueue.length} items`}
+                tone={priorityQueue.length > 0 ? "warning" : "success"}
               />
-            }
-            defaultOpen
-          >
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[#243047] hover:bg-transparent [&>th]:h-12 [&>th]:px-5 [&>th]:text-[13px] [&>th]:text-[#9CA3AF]">
-                    <TableHead>Invoice / Supplier</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>State</TableHead>
-                    <TableHead>Risk</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {activeInvoices.map((invoice) => (
-                    <TableRow
-                      key={invoice.id}
-                      className="border-[#243047] hover:bg-[#172033]/70 [&>td]:px-5 [&>td]:py-4"
-                    >
-                      <TableCell>
-                        <p className="text-[15px] font-medium text-[#E5E7EB]">
-                          {supplierName(suppliers, invoice.supplierId)}
-                        </p>
-                        <p className="mt-1 font-mono text-[12px] text-[#6B7280]">
-                          {invoice.id}
-                        </p>
-                      </TableCell>
-                      <TableCell className="text-[15px] font-medium text-[#E5E7EB]">
-                        {invoice.currency}{" "}
-                        {invoice.amount.toLocaleString("en-US")}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge
-                          label={invoice.approvalState}
-                          tone={approvalTone[invoice.approvalState]}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge
-                          label={invoice.riskLevel}
-                          tone={riskTone[invoice.riskLevel]}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          asChild
-                          variant="outline"
-                          className="h-10 rounded-2xl border-[#334155] bg-[#172033] px-3 text-[13px] font-semibold text-[#E5E7EB] hover:border-[#38BDF8]/40 hover:bg-[#1B2940]"
-                        >
-                          <Link href={`/invoice-management/${invoice.id}`}>
-                            <FileCheck2 className="size-4" aria-hidden="true" />
-                            Review
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
             </div>
-          </CollapsibleSection>
-        </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-[#243047] hover:bg-transparent">
+                  <TableHead className="px-5 text-[12px] text-[#9CA3AF]">
+                    Item
+                  </TableHead>
+                  <TableHead className="text-[12px] text-[#9CA3AF]">
+                    Summary
+                  </TableHead>
+                  <TableHead className="text-[12px] text-[#9CA3AF]">
+                    Status
+                  </TableHead>
+                  <TableHead className="text-right text-[12px] text-[#9CA3AF]">
+                    Action
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {priorityQueue.map((item) => (
+                  <TableRow
+                    key={`${item.href}-${item.id}`}
+                    className="border-[#243047] hover:bg-[#172033]/70"
+                  >
+                    <TableCell className="px-5 py-4 text-[15px] font-medium text-[#E5E7EB]">
+                      {item.label}
+                    </TableCell>
+                    <TableCell className="py-4 text-[14px] text-[#9CA3AF]">
+                      {item.summary}
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <StatusBadge label={item.status} tone={item.tone} />
+                    </TableCell>
+                    <TableCell className="py-4 text-right">
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="h-9 rounded-2xl border-[#334155] bg-[#172033] px-3 text-[#E5E7EB] hover:border-[#38BDF8]/40 hover:bg-[#1B2940]"
+                      >
+                        <Link href={item.href}>Open</Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {priorityQueue.length === 0 ? (
+                  <TableRow className="border-[#243047] hover:bg-transparent">
+                    <TableCell
+                      colSpan={4}
+                      className="px-5 py-10 text-center text-[14px] text-[#9CA3AF]"
+                    >
+                      No urgent items right now.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-        {/* Sidebar Content: Insights and Agent Controls */}
         <div className="space-y-6">
-          <Card className="panel-surface rounded-3xl py-0">
-            <CardContent className="p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#FCD34D]">
-                    Threshold Insight
-                  </p>
-                  <h3 className="mt-2 text-[18px] font-semibold text-[#F8FAFC]">
-                    Reorder signal
-                  </h3>
-                </div>
-                <div className="rounded-2xl border border-[#FACC15]/20 bg-[#FACC15]/10 p-2.5">
-                  <Bot className="size-5 text-[#FCD34D]" aria-hidden="true" />
-                </div>
-              </div>
-              <p className="text-[36px] font-semibold leading-none text-[#F8FAFC]">
-                {insightCards.thresholdRecommendation.value}
+          <Card className="panel-surface rounded-3xl py-0 shadow-none ring-0">
+            <CardHeader className="border-b border-[#243047] px-5 py-4">
+              <CardTitle className="text-[18px] font-semibold text-[#F8FAFC]">
+                Quick Actions
+              </CardTitle>
+              <p className="mt-1 text-[14px] text-[#94A3B8]">
+                Jump straight to the area you need.
               </p>
-              <p className="mt-3 text-[14px] leading-6 text-[#94A3B8]">
-                {firstSentence(insightCards.thresholdRecommendation.body)}
-              </p>
+            </CardHeader>
+            <CardContent className="space-y-3 p-5">
+              <QuickActionLink
+                href="/inventory"
+                title="Review stock"
+                body="Open product stock and restock suggestions."
+              />
+              <QuickActionLink
+                href="/conversations"
+                title="Open supplier inbox"
+                body="Reply to suppliers and review accepted deals."
+              />
+              <QuickActionLink
+                href="/invoice-management"
+                title="Review invoices"
+                body="Check invoices waiting for approval or payment."
+              />
+              <QuickActionLink
+                href="/suppliers"
+                title="Manage suppliers"
+                body="Update supplier records and SKU assignments."
+              />
             </CardContent>
           </Card>
 
-          <Card className="panel-surface rounded-3xl py-0">
-            <CardContent className="flex flex-col gap-4 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#7DD3FC]">
-                    Agent Controls
-                  </p>
-                  <h3 className="mt-2 text-[18px] font-semibold text-[#F8FAFC]">
-                    AI Analysis
-                  </h3>
-                </div>
-                <Sparkles className="size-5 text-[#7DD3FC]" aria-hidden="true" />
-              </div>
-              <DashboardThresholdAnalysisButton />
+          <Card className="panel-surface rounded-3xl py-0 shadow-none ring-0">
+            <CardHeader className="border-b border-[#243047] px-5 py-4">
+              <CardTitle className="text-[18px] font-semibold text-[#F8FAFC]">
+                Today&apos;s Focus
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 p-5 text-[14px] text-[#94A3B8]">
+              <FocusRow
+                icon={AlertTriangle}
+                title="Restock gaps"
+                value={`${restockNeeded.length} product${restockNeeded.length === 1 ? "" : "s"} waiting`}
+              />
+              <FocusRow
+                icon={MessageSquareText}
+                title="Supplier follow-up"
+                value={`${newSupplierMessages.length} conversation${newSupplierMessages.length === 1 ? "" : "s"} in progress`}
+              />
+              <FocusRow
+                icon={FileWarning}
+                title="Invoice review"
+                value={`${invoicesNeedingAttention.length} invoice${invoicesNeedingAttention.length === 1 ? "" : "s"} still active`}
+              />
             </CardContent>
           </Card>
         </div>
       </section>
-
-      <DashboardCharts
-        monthlyDemandData={[]}
-        stockTrendData={stockTrendData}
-        hideMonthlyDemand
-      />
     </>
   )
 }
 
-function isActionableRestock(
-  item: Awaited<ReturnType<typeof getRestockRecommendations>>[number]
-) {
-  if (item.restockRequestStatus === "accepted") {
-    return item.workflowState !== "completed"
-  }
-
+function QuickActionLink({
+  href,
+  title,
+  body,
+}: {
+  href: string
+  title: string
+  body: string
+}) {
   return (
-    item.restockRequestStatus === "pending" ||
-    item.restockRequestStatus === "reviewed"
+    <Link
+      href={href}
+      className="flex items-center justify-between gap-4 rounded-2xl border border-[#243047] bg-[#172033] px-4 py-3 transition-colors hover:border-[#3B82F6]/40 hover:bg-[#1B2940]"
+    >
+      <div>
+        <p className="text-[15px] font-medium text-[#E5E7EB]">{title}</p>
+        <p className="mt-1 text-[13px] text-[#94A3B8]">{body}</p>
+      </div>
+      <ArrowRight className="size-4 shrink-0 text-[#93C5FD]" aria-hidden="true" />
+    </Link>
   )
 }
 
-function restockQueueStatus(
-  item: Awaited<ReturnType<typeof getRestockRecommendations>>[number]
-): { label: string; tone: StatusTone } {
-  if (
-    item.restockRequestStatus === "accepted" &&
-    item.workflowState &&
-    item.workflowState !== "completed"
-  ) {
-    return { label: "Restocking", tone: "ai" }
-  }
-
-  if (item.restockRequestStatus === "reviewed") {
-    return { label: "Request reviewed", tone: "warning" }
-  }
-
-  return { label: "Request pending", tone: "default" }
+function FocusRow({
+  icon: Icon,
+  title,
+  value,
+}: {
+  icon: LucideIcon
+  title: string
+  value: string
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-[#243047] bg-[#172033] px-4 py-3">
+      <div className="flex size-10 items-center justify-center rounded-2xl bg-[#0F1728]">
+        <Icon className="size-4 text-[#93C5FD]" aria-hidden="true" />
+      </div>
+      <div>
+        <p className="text-[13px] uppercase tracking-[0.16em] text-[#64748B]">
+          {title}
+        </p>
+        <p className="mt-1 text-[15px] font-medium text-[#E5E7EB]">{value}</p>
+      </div>
+    </div>
+  )
 }
