@@ -1,23 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { ArrowRight, Inbox } from "lucide-react"
 import { useMemo, useState } from "react"
 
+import { EmptyState } from "@/components/shared/empty-state"
 import { FilterToolbar } from "@/components/shared/filter-toolbar"
 import { InvoiceProcessingTrigger } from "@/components/shared/invoice-ai-analysis-trigger"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Invoice, StatusTone, Supplier } from "@/lib/types"
 
 type InvoiceBoardProps = {
@@ -25,34 +18,44 @@ type InvoiceBoardProps = {
   suppliers: Supplier[]
 }
 
-type InvoiceTab = "ready" | "review" | "issue" | "completed"
-
 const riskTone: Record<Invoice["riskLevel"], StatusTone> = {
   "Low Risk": "success",
   "Medium Risk": "warning",
   "High Risk": "danger",
 }
 
-function supplierName(suppliers: Supplier[], supplierId: string) {
-  return (
-    suppliers.find((supplier) => supplier.id === supplierId)?.name ??
-    "Unknown supplier"
-  )
+const validationTone: Record<Invoice["validationStatus"], StatusTone> = {
+  Parsed: "default",
+  Validated: "success",
+  "Mismatch Detected": "danger",
+  "Missing Information": "warning",
 }
 
-function invoiceTab(invoice: Invoice): InvoiceTab {
-  if (invoice.approvalState === "Completed") return "completed"
-  if (invoice.approvalState === "Blocked") return "issue"
-  if (invoice.approvalState === "Needs Review") return "review"
-  return "ready"
-}
-
-function invoiceStatusLabel(invoice: Invoice) {
-  if (invoice.approvalState === "Blocked") return "Issue Found"
-  if (invoice.approvalState === "Needs Review") return "Needs Review"
-  if (invoice.approvalState === "Completed") return "Completed"
-  return "Ready for Approval"
-}
+const approvalLanes: Array<{
+  state: Invoice["approvalState"]
+  title: string
+  description: string
+  accent: string
+}> = [
+  {
+    state: "Waiting Approval",
+    title: "Waiting Approval",
+    description: "Clean invoices ready for final review.",
+    accent: "#8B5CF6",
+  },
+  {
+    state: "Needs Review",
+    title: "Needs Review",
+    description: "Mismatch or validation issue needs attention.",
+    accent: "#F59E0B",
+  },
+  {
+    state: "Blocked",
+    title: "Blocked",
+    description: "Cannot approve until the issue is cleared.",
+    accent: "#EF4444",
+  },
+]
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
   day: "numeric",
@@ -62,7 +65,15 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
   timeZone: "UTC",
 })
 
+function supplierName(suppliers: Supplier[], supplierId: string) {
+  return (
+    suppliers.find((supplier) => supplier.id === supplierId)?.name ??
+    "Unknown supplier"
+  )
+}
+
 export function InvoiceBoard({ invoices, suppliers }: InvoiceBoardProps) {
+  const reduceMotion = useReducedMotion()
   const [query, setQuery] = useState("")
   const [riskFilter, setRiskFilter] = useState("all")
 
@@ -70,12 +81,16 @@ export function InvoiceBoard({ invoices, suppliers }: InvoiceBoardProps) {
     const keyword = query.trim().toLowerCase()
     return invoices.filter((invoice) => {
       const haystack = [
+        invoice.id,
         invoice.invoiceNumber,
+        invoice.workflowId,
+        invoice.approvalState,
+        invoice.validationStatus,
+        invoice.riskLevel,
         invoice.currency,
         invoice.amount.toString(),
         invoice.linkedSkus.join(" "),
         supplierName(suppliers, invoice.supplierId),
-        invoiceStatusLabel(invoice),
       ]
         .join(" ")
         .toLowerCase()
@@ -86,114 +101,114 @@ export function InvoiceBoard({ invoices, suppliers }: InvoiceBoardProps) {
     })
   }, [invoices, query, riskFilter, suppliers])
 
-  const tabs: Array<{ value: InvoiceTab; label: string }> = [
-    { value: "ready", label: "Ready for Approval" },
-    { value: "review", label: "Needs Review" },
-    { value: "issue", label: "Issue Found" },
-    { value: "completed", label: "Completed" },
-  ]
-
   return (
-    <Tabs defaultValue="ready" className="gap-4">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <TabsList
-          variant="line"
-          className="w-full justify-start gap-2 overflow-x-auto rounded-2xl border border-[#243047] bg-[#111827] p-2"
-        >
-          {tabs.map((tab) => {
-            const count = filteredInvoices.filter((invoice) => invoiceTab(invoice) === tab.value)
-              .length
-            return (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className="rounded-xl px-4 py-2 text-[#94A3B8] data-active:bg-[#172033] data-active:text-[#F8FAFC]"
+    <div className="space-y-4">
+      <FilterToolbar
+        searchPlaceholder="Search invoices, suppliers, SKU, workflow, amount, or approval state..."
+        searchValue={query}
+        onSearchChange={setQuery}
+        filterLabel="Invoice risk"
+        filterValue={riskFilter}
+        onFilterChange={setRiskFilter}
+        filterOptions={[
+          { label: "All risk levels", value: "all" },
+          { label: "Low risk", value: "Low Risk" },
+          { label: "Medium risk", value: "Medium Risk" },
+          { label: "High risk", value: "High Risk" },
+        ]}
+      />
+
+      <section className="grid gap-4 xl:grid-cols-3">
+        {approvalLanes.map((lane, index) => {
+          const invoicesByLane = filteredInvoices.filter(
+            (invoice) => invoice.approvalState === lane.state
+          )
+
+          return (
+            <motion.div
+              key={lane.state}
+              initial={reduceMotion ? undefined : { opacity: 0, y: 10 }}
+              animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+              transition={{
+                duration: reduceMotion ? 0 : 0.22,
+                delay: reduceMotion ? 0 : index * 0.05,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+            >
+              <Card
+                className="min-h-[420px] rounded-[14px] border border-[#243047] border-t-4 bg-[#111827] py-0 shadow-none ring-0 transition hover:border-[#3B82F6]/60"
+                style={{ borderTopColor: lane.accent }}
               >
-                {tab.label} ({count})
-              </TabsTrigger>
-            )
-          })}
-        </TabsList>
+                <CardContent className="p-0">
+                  <div className="border-b border-[#243047] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h2 className="text-[18px] font-semibold text-[#E5E7EB]">
+                          {lane.title}
+                        </h2>
+                        <p className="mt-2 min-h-10 text-[13px] leading-5 text-[#9CA3AF]">
+                          {lane.description}
+                        </p>
+                      </div>
+                      <span
+                        className="rounded-[10px] border px-3 py-1 text-[13px] font-semibold"
+                        style={{
+                          borderColor: `${lane.accent}66`,
+                          backgroundColor: `${lane.accent}1A`,
+                          color: lane.accent,
+                        }}
+                      >
+                        {invoicesByLane.length}
+                      </span>
+                    </div>
+                  </div>
 
-        <div className="xl:min-w-[360px]">
-          <FilterToolbar
-            searchPlaceholder="Search invoices, suppliers, or SKU..."
-            searchValue={query}
-            onSearchChange={setQuery}
-            filterLabel="Risk"
-            filterValue={riskFilter}
-            onFilterChange={setRiskFilter}
-            filterOptions={[
-              { label: "All risk levels", value: "all" },
-              { label: "Low risk", value: "Low Risk" },
-              { label: "Medium risk", value: "Medium Risk" },
-              { label: "High risk", value: "High Risk" },
-            ]}
-          />
-        </div>
-      </div>
-
-      {tabs.map((tab) => {
-        const invoicesByTab = filteredInvoices.filter(
-          (invoice) => invoiceTab(invoice) === tab.value
-        )
-
-        return (
-          <TabsContent key={tab.value} value={tab.value}>
-            <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-[#243047] hover:bg-transparent">
-                      <TableHead className="px-5 text-[12px] text-[#9CA3AF]">
-                        Supplier
-                      </TableHead>
-                      <TableHead className="text-[12px] text-[#9CA3AF]">
-                        Invoice
-                      </TableHead>
-                      <TableHead className="text-[12px] text-[#9CA3AF]">
-                        Amount
-                      </TableHead>
-                      <TableHead className="text-[12px] text-[#9CA3AF]">
-                        Status
-                      </TableHead>
-                      <TableHead className="text-[12px] text-[#9CA3AF]">
-                        Risk
-                      </TableHead>
-                      <TableHead className="text-[12px] text-[#9CA3AF]">
-                        Updated
-                      </TableHead>
-                      <TableHead className="text-right text-[12px] text-[#9CA3AF]">
-                        Action
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {invoicesByTab.map((invoice) => (
-                      <InvoiceRow key={invoice.id} invoice={invoice} suppliers={suppliers} />
-                    ))}
-                    {invoicesByTab.length === 0 ? (
-                      <TableRow className="border-[#243047] hover:bg-transparent">
-                        <TableCell
-                          colSpan={7}
-                          className="px-5 py-10 text-center text-[14px] text-[#9CA3AF]"
+                  <div className="space-y-3 p-3">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      {invoicesByLane.length > 0 ? (
+                        invoicesByLane.map((invoice, cardIndex) => (
+                          <motion.div
+                            key={invoice.id}
+                            layout
+                            initial={reduceMotion ? undefined : { opacity: 0, y: 8 }}
+                            animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+                            exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
+                            transition={{
+                              duration: reduceMotion ? 0 : 0.18,
+                              delay: reduceMotion ? 0 : cardIndex * 0.02,
+                            }}
+                          >
+                            <InvoiceWorkCard invoice={invoice} suppliers={suppliers} />
+                          </motion.div>
+                        ))
+                      ) : (
+                        <motion.div
+                          key={`${lane.state}-empty`}
+                          initial={reduceMotion ? undefined : { opacity: 0 }}
+                          animate={reduceMotion ? undefined : { opacity: 1 }}
+                          exit={reduceMotion ? undefined : { opacity: 0 }}
                         >
-                          No invoices in this view.
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )
-      })}
-    </Tabs>
+                          <EmptyState
+                            icon={Inbox}
+                            title="No invoices"
+                            description="This queue is clear with the current filters."
+                            compact
+                          />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )
+        })}
+      </section>
+    </div>
   )
 }
 
-function InvoiceRow({
+function InvoiceWorkCard({
   invoice,
   suppliers,
 }: {
@@ -215,59 +230,85 @@ function InvoiceRow({
           : localProcessingLabel
 
   return (
-    <TableRow className="border-[#243047] hover:bg-[#172033]/70">
-      <TableCell className="px-5 py-4">
-        <InvoiceProcessingTrigger
-          invoiceId={invoice.id}
-          shouldProcess={shouldProcessInvoice}
-          processingStatus={invoice.processingStatus}
-          onStarted={() => {
-            setLocalProcessingLabel(invoice.extractedText ? "Checking" : "Preparing")
-          }}
-          onCompleted={(ok) => {
-            if (!ok) {
-              setLocalProcessingLabel(null)
-            }
-          }}
-        />
-        <p className="text-[15px] font-medium text-[#E5E7EB]">
-          {supplierName(suppliers, invoice.supplierId)}
+    <article className="rounded-[12px] border border-[#243047] bg-[#172033] p-4 transition hover:border-[#3B82F6]/70 hover:bg-[#1B263C]">
+      <InvoiceProcessingTrigger
+        invoiceId={invoice.id}
+        shouldProcess={shouldProcessInvoice}
+        processingStatus={invoice.processingStatus}
+        onStarted={() => {
+          setLocalProcessingLabel(invoice.extractedText ? "Checking" : "Preparing")
+        }}
+        onCompleted={(ok) => {
+          if (!ok) {
+            setLocalProcessingLabel(null)
+          }
+        }}
+      />
+
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[15px] font-semibold text-[#E5E7EB]">
+            {invoice.id}
+          </p>
+          <p className="mt-1 text-[13px] leading-5 text-[#9CA3AF]">
+            {supplierName(suppliers, invoice.supplierId)}
+          </p>
+        </div>
+        <p className="text-right text-[15px] font-semibold text-[#E5E7EB]">
+          {invoice.currency} {invoice.amount.toLocaleString("en-US")}
         </p>
-        <p className="mt-1 text-[12px] text-[#6B7280]">
-          {invoice.linkedSkus[0] ?? "Direct upload"}
-        </p>
-      </TableCell>
-      <TableCell className="py-4">
-        <p className="text-[14px] font-medium text-[#E5E7EB]">{invoice.invoiceNumber}</p>
-        <p className="mt-1 text-[12px] text-[#6B7280]">{invoice.fileName}</p>
-      </TableCell>
-      <TableCell className="py-4 text-[14px] font-medium text-[#E5E7EB]">
-        {invoice.currency} {invoice.amount.toLocaleString("en-US")}
-      </TableCell>
-      <TableCell className="py-4">
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
         <StatusBadge
-          label={processingLabel ?? invoiceStatusLabel(invoice)}
-          tone={processingLabel ? "ai" : invoice.approvalState === "Blocked" ? "danger" : invoice.approvalState === "Needs Review" ? "warning" : invoice.approvalState === "Completed" ? "success" : "ai"}
+          label={processingLabel ?? invoice.riskLevel}
+          tone={processingLabel ? "ai" : riskTone[invoice.riskLevel]}
         />
-      </TableCell>
-      <TableCell className="py-4">
-        <StatusBadge label={invoice.riskLevel} tone={riskTone[invoice.riskLevel]} />
-      </TableCell>
-      <TableCell className="py-4 text-[13px] text-[#9CA3AF]">
-        {dateFormatter.format(new Date(invoice.lastUpdated))}
-      </TableCell>
-      <TableCell className="py-4 text-right">
-        <Button
-          asChild
-          variant="outline"
-          className="h-8 rounded-[10px] border-[#243047] bg-[#172033] text-[#E5E7EB] hover:bg-[#243047]"
-        >
-          <Link href={`/invoice-management/${invoice.id}`} className="inline-flex items-center gap-2">
-            Open
-            <ArrowRight className="size-4" aria-hidden="true" />
+        <StatusBadge
+          label={invoice.validationStatus}
+          tone={validationTone[invoice.validationStatus]}
+        />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 rounded-[10px] bg-[#0B1020] p-3">
+        <div>
+          <p className="text-[13px] text-[#6B7280]">Workflow</p>
+          <p className="mt-1 text-[13px] font-medium text-[#E5E7EB]">
+            {invoice.workflowId}
+          </p>
+        </div>
+        <div>
+          <p className="text-[13px] text-[#6B7280]">Updated</p>
+          <p className="mt-1 text-[13px] font-medium text-[#E5E7EB]">
+            {dateFormatter.format(new Date(invoice.lastUpdated))}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {invoice.linkedSkus.map((sku) => (
+          <Link key={sku} href={`/inventory/${sku}`}>
+            <StatusBadge
+              label={sku}
+              tone="default"
+              className="hover:border-[#3B82F6] hover:text-[#93C5FD]"
+            />
           </Link>
-        </Button>
-      </TableCell>
-    </TableRow>
+        ))}
+      </div>
+
+      <Button
+        asChild
+        className="mt-4 h-9 w-full rounded-[10px] bg-[#111827] text-[#E5E7EB] hover:bg-[#243047]"
+      >
+        <Link
+          href={`/invoice-management/${invoice.id}`}
+          className="flex items-center justify-center gap-2"
+        >
+          Review Invoice
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </Button>
+    </article>
   )
 }

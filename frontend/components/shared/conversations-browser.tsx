@@ -1,14 +1,15 @@
 "use client"
 
 import Link from "next/link"
-import { MessageSquareText } from "lucide-react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { Inbox } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { FilterToolbar } from "@/components/shared/filter-toolbar"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -17,8 +18,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { Conversation, Invoice, Product, StatusTone, Supplier } from "@/lib/types"
+import type {
+  Conversation,
+  Invoice,
+  NegotiationState,
+  Product,
+  StatusTone,
+  Supplier,
+} from "@/lib/types"
 
 type ConversationsBrowserProps = {
   conversations: Conversation[]
@@ -27,14 +34,30 @@ type ConversationsBrowserProps = {
   suppliers: Supplier[]
 }
 
-type QueueTab = "progress" | "attention" | "invoice" | "completed"
-
 const priorityTone: Record<string, StatusTone> = {
   critical: "danger",
   high: "warning",
   medium: "ai",
   low: "default",
 }
+
+const stateTone: Record<NegotiationState, StatusTone> = {
+  "New Input": "default",
+  "Needs Analysis": "warning",
+  "Counter Offer Suggested": "ai",
+  "Waiting Reply": "default",
+  Accepted: "success",
+  Escalated: "danger",
+  Closed: "success",
+}
+
+const dateFormatter = new Intl.DateTimeFormat("en", {
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  month: "short",
+  timeZone: "UTC",
+})
 
 function supplierName(suppliers: Supplier[], supplierId: string) {
   return (
@@ -51,8 +74,8 @@ function productLabel(products: Product[], linkedSkus: string[]) {
   return names.length > 0 ? names.join(", ") : "Unassigned product"
 }
 
-function linkedInvoice(invoices: Invoice[], conversation: Conversation) {
-  return (
+function linkedInvoiceStatus(invoices: Invoice[], conversation: Conversation) {
+  const invoice =
     (conversation.linkedInvoiceId
       ? invoices.find((item) => item.id === conversation.linkedInvoiceId)
       : undefined) ??
@@ -60,52 +83,24 @@ function linkedInvoice(invoices: Invoice[], conversation: Conversation) {
       ? invoices.find((item) => item.workflowId === conversation.workflowId)
       : undefined) ??
     invoices.find((item) => conversation.linkedSkus.includes(item.productSku))
-  )
+
+  return invoice?.status ?? "pending"
 }
 
-function conversationQueue(
-  invoices: Invoice[],
-  conversation: Conversation
-): QueueTab {
-  const invoice = linkedInvoice(invoices, conversation)
-  const invoiceComplete =
-    invoice?.status === "paid" || invoice?.approvalState === "Completed"
-
-  if (conversation.negotiationState === "Closed" || invoiceComplete) {
-    return "completed"
-  }
-
+function statusLabel(invoices: Invoice[], conversation: Conversation) {
   if (
-    conversation.negotiationState === "Accepted" ||
-    Boolean(conversation.submittedOrderId)
+    conversation.negotiationState === "Accepted" &&
+    linkedInvoiceStatus(invoices, conversation) !== "paid"
   ) {
-    return "invoice"
+    return "Ready for Invoice"
   }
 
-  if (
-    conversation.negotiationState === "Needs Analysis" ||
-    conversation.negotiationState === "Escalated"
-  ) {
-    return "attention"
+  if (conversation.negotiationState === "Closed") {
+    return "Completed"
   }
 
-  return "progress"
+  return conversation.negotiationState
 }
-
-function queueLabel(queue: QueueTab) {
-  if (queue === "attention") return "Needs Attention"
-  if (queue === "invoice") return "Ready for Invoice"
-  if (queue === "completed") return "Completed"
-  return "In Progress"
-}
-
-const dateFormatter = new Intl.DateTimeFormat("en", {
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  month: "short",
-  timeZone: "UTC",
-})
 
 export function ConversationsBrowser({
   conversations,
@@ -113,7 +108,9 @@ export function ConversationsBrowser({
   products,
   suppliers,
 }: ConversationsBrowserProps) {
+  const reduceMotion = useReducedMotion()
   const [query, setQuery] = useState("")
+  const [stateFilter, setStateFilter] = useState("all")
 
   const sortedConversations = useMemo(
     () =>
@@ -138,169 +135,258 @@ export function ConversationsBrowser({
         .join(" ")
         .toLowerCase()
 
-      return !keyword || haystack.includes(keyword)
+      const matchesSearch = !keyword || haystack.includes(keyword)
+      const matchesState =
+        stateFilter === "all" || conversation.negotiationState === stateFilter
+      return matchesSearch && matchesState
     })
-  }, [products, query, sortedConversations, suppliers])
+  }, [products, query, sortedConversations, stateFilter, suppliers])
 
-  const queueTabs: Array<{ value: QueueTab; label: string }> = [
-    { value: "progress", label: "In Progress" },
-    { value: "attention", label: "Needs Attention" },
-    { value: "invoice", label: "Ready for Invoice" },
-    { value: "completed", label: "Completed" },
+  const statusGroups = [
+    {
+      title: "On Progress",
+      description: "AI is actively negotiating or waiting on supplier response.",
+      tone: "ai" as StatusTone,
+      match: (conversation: Conversation) =>
+        ["Counter Offer Suggested", "Waiting Reply", "New Input"].includes(
+          conversation.negotiationState
+        ),
+    },
+    {
+      title: "Need Review",
+      description: "Messy input, missing fields, or escalation needs operator attention.",
+      tone: "warning" as StatusTone,
+      match: (conversation: Conversation) =>
+        ["Needs Analysis", "Escalated"].includes(conversation.negotiationState),
+    },
+    {
+      title: "Accepted, Invoice Need To Approve",
+      description: "Supplier terms accepted and invoice approval is still pending.",
+      tone: "success" as StatusTone,
+      match: (conversation: Conversation) =>
+        conversation.negotiationState === "Accepted" &&
+        linkedInvoiceStatus(invoices, conversation) !== "paid",
+    },
+    {
+      title: "Completed",
+      description: "Negotiation and invoice follow-up are closed.",
+      tone: "default" as StatusTone,
+      match: (conversation: Conversation) =>
+        conversation.negotiationState === "Closed" ||
+        linkedInvoiceStatus(invoices, conversation) === "paid",
+    },
   ]
 
   return (
-    <div className="space-y-5">
-      <Tabs defaultValue="progress" className="gap-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <TabsList
-            variant="line"
-            className="w-full justify-start gap-2 overflow-x-auto rounded-2xl border border-[#243047] bg-[#111827] p-2"
-          >
-            {queueTabs.map((tab) => {
-              const count = filteredConversations.filter(
-                (conversation) => conversationQueue(invoices, conversation) === tab.value
-              ).length
-              return (
-                <TabsTrigger
-                  key={tab.value}
-                  value={tab.value}
-                  className="rounded-xl px-4 py-2 text-[#94A3B8] data-active:bg-[#172033] data-active:text-[#F8FAFC]"
-                >
-                  {tab.label} ({count})
-                </TabsTrigger>
-              )
-            })}
-          </TabsList>
+    <div className="space-y-6">
+      <FilterToolbar
+        searchPlaceholder="Search suppliers, products, SKU, or status..."
+        searchValue={query}
+        onSearchChange={setQuery}
+        filterLabel="Conversation state"
+        filterValue={stateFilter}
+        onFilterChange={setStateFilter}
+        filterOptions={[
+          { label: "All states", value: "all" },
+          { label: "New Input", value: "New Input" },
+          { label: "Needs Analysis", value: "Needs Analysis" },
+          { label: "Counter Offer", value: "Counter Offer Suggested" },
+          { label: "Waiting Reply", value: "Waiting Reply" },
+          { label: "Accepted", value: "Accepted" },
+          { label: "Escalated", value: "Escalated" },
+          { label: "Closed", value: "Closed" },
+        ]}
+      />
 
-          <div className="xl:min-w-[360px]">
-            <FilterToolbar
-              searchPlaceholder="Search suppliers, products, or status..."
-              searchValue={query}
-              onSearchChange={setQuery}
-            />
-          </div>
-        </div>
-
-        {queueTabs.map((tab) => {
-          const queueItems = filteredConversations.filter(
-            (conversation) => conversationQueue(invoices, conversation) === tab.value
-          )
+      <section className="grid gap-4 xl:grid-cols-4">
+        {statusGroups.map((group, index) => {
+          const groupedConversations = filteredConversations.filter(group.match)
 
           return (
-            <TabsContent key={tab.value} value={tab.value} className="space-y-4">
-              <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-                <CardContent className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div>
-                    <p className="text-[18px] font-semibold text-[#E5E7EB]">
-                      {tab.label}
-                    </p>
-                    <p className="mt-1 text-[14px] text-[#9CA3AF]">
-                      {tab.value === "invoice"
-                        ? "Accepted deals waiting for invoice review or settlement."
-                        : tab.value === "attention"
-                          ? "Conversations that need operator review."
-                          : tab.value === "completed"
-                            ? "Closed conversations and settled orders."
-                            : "Supplier conversations that are still moving."}
-                    </p>
+            <motion.div
+              key={group.title}
+              initial={reduceMotion ? undefined : { opacity: 0, y: 10 }}
+              animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+              transition={{
+                duration: reduceMotion ? 0 : 0.22,
+                delay: reduceMotion ? 0 : index * 0.04,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+            >
+              <Card className="h-full rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
+                <CardHeader className="border-b border-[#243047] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-[18px] font-semibold text-[#E5E7EB]">
+                        {group.title}
+                      </CardTitle>
+                      <p className="mt-1 text-[13px] leading-5 text-[#9CA3AF]">
+                        {group.description}
+                      </p>
+                    </div>
+                    <StatusBadge
+                      label={`${groupedConversations.length}`}
+                      tone={group.tone}
+                    />
                   </div>
-                  <StatusBadge
-                    label={`${queueItems.length} item${queueItems.length === 1 ? "" : "s"}`}
-                    tone={tab.value === "attention" ? "warning" : tab.value === "invoice" ? "success" : "default"}
-                  />
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-[#243047] hover:bg-transparent">
-                        <TableHead className="px-5 text-[12px] text-[#9CA3AF]">
-                          Supplier
-                        </TableHead>
-                        <TableHead className="text-[12px] text-[#9CA3AF]">
-                          Product
-                        </TableHead>
-                        <TableHead className="text-[12px] text-[#9CA3AF]">
-                          Status
-                        </TableHead>
-                        <TableHead className="text-[12px] text-[#9CA3AF]">
-                          Last Updated
-                        </TableHead>
-                        <TableHead className="text-[12px] text-[#9CA3AF]">
-                          Priority
-                        </TableHead>
-                        <TableHead className="text-right text-[12px] text-[#9CA3AF]">
-                          Action
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {queueItems.map((conversation) => (
-                        <TableRow
+                </CardHeader>
+                <CardContent className="space-y-3 p-4">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    {groupedConversations.length > 0 ? (
+                      groupedConversations.map((conversation, cardIndex) => (
+                        <motion.div
                           key={conversation.id}
-                          className="border-[#243047] hover:bg-[#172033]/70"
+                          layout
+                          initial={reduceMotion ? undefined : { opacity: 0, y: 8 }}
+                          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+                          exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
+                          transition={{
+                            duration: reduceMotion ? 0 : 0.18,
+                            delay: reduceMotion ? 0 : cardIndex * 0.02,
+                          }}
                         >
-                          <TableCell className="px-5 py-4 text-[15px] font-medium text-[#E5E7EB]">
-                            {supplierName(suppliers, conversation.supplierId)}
-                          </TableCell>
-                          <TableCell className="py-4 text-[14px] text-[#9CA3AF]">
-                            {productLabel(products, conversation.linkedSkus)}
-                          </TableCell>
-                          <TableCell className="py-4">
-                            <StatusBadge
-                              label={queueLabel(conversationQueue(invoices, conversation))}
-                              tone={
-                                conversationQueue(invoices, conversation) === "attention"
-                                  ? "warning"
-                                  : conversationQueue(invoices, conversation) === "invoice"
-                                    ? "success"
-                                    : "default"
-                              }
-                            />
-                          </TableCell>
-                          <TableCell className="py-4 text-[13px] text-[#9CA3AF]">
-                            {dateFormatter.format(new Date(conversation.lastMessageAt))}
-                          </TableCell>
-                          <TableCell className="py-4">
-                            <StatusBadge
-                              label={conversation.priority}
-                              tone={priorityTone[conversation.priority]}
-                            />
-                          </TableCell>
-                          <TableCell className="py-4 text-right">
-                            <Button
-                              asChild
-                              variant="outline"
-                              className="h-8 rounded-[10px] border-[#243047] bg-[#172033] text-[#E5E7EB] hover:bg-[#243047]"
-                            >
-                              <Link href={`/conversations/${conversation.id}`}>Open</Link>
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {queueItems.length === 0 ? (
-                        <TableRow className="border-[#243047] hover:bg-transparent">
-                          <TableCell colSpan={6} className="px-5 py-10">
-                            <EmptyState
-                              icon={MessageSquareText}
-                              title="No conversations here"
-                              description="This tab is clear with the current search."
-                              compact
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                    </TableBody>
-                  </Table>
+                          <ConversationMiniCard conversation={conversation} />
+                        </motion.div>
+                      ))
+                    ) : (
+                      <motion.div
+                        key={`${group.title}-empty`}
+                        initial={reduceMotion ? undefined : { opacity: 0 }}
+                        animate={reduceMotion ? undefined : { opacity: 1 }}
+                        exit={reduceMotion ? undefined : { opacity: 0 }}
+                      >
+                        <EmptyState
+                          icon={Inbox}
+                          title="No conversations"
+                          description="This queue is clear with the current filters."
+                          tone={group.tone}
+                          compact
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </CardContent>
               </Card>
-            </TabsContent>
+            </motion.div>
           )
         })}
-      </Tabs>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-[20px] font-semibold text-[#E5E7EB]">
+            All Conversations
+          </h2>
+          <p className="mt-1 text-[14px] text-[#9CA3AF]">
+            Showing {filteredConversations.length} of {conversations.length} conversations.
+          </p>
+        </div>
+
+        <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-[#243047] hover:bg-transparent">
+                  <TableHead className="px-5 text-[12px] text-[#9CA3AF]">
+                    Supplier
+                  </TableHead>
+                  <TableHead className="text-[12px] text-[#9CA3AF]">
+                    Product
+                  </TableHead>
+                  <TableHead className="text-[12px] text-[#9CA3AF]">
+                    Status
+                  </TableHead>
+                  <TableHead className="text-[12px] text-[#9CA3AF]">
+                    Last Updated
+                  </TableHead>
+                  <TableHead className="text-[12px] text-[#9CA3AF]">
+                    Priority
+                  </TableHead>
+                  <TableHead className="text-right text-[12px] text-[#9CA3AF]">
+                    Action
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredConversations.map((conversation) => (
+                  <TableRow
+                    key={conversation.id}
+                    className="border-[#243047] hover:bg-[#172033]/70"
+                  >
+                    <TableCell className="px-5 py-4 text-[15px] font-medium text-[#E5E7EB]">
+                      {supplierName(suppliers, conversation.supplierId)}
+                    </TableCell>
+                    <TableCell className="py-4 text-[14px] text-[#9CA3AF]">
+                      {productLabel(products, conversation.linkedSkus)}
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <StatusBadge
+                        label={statusLabel(invoices, conversation)}
+                        tone={stateTone[conversation.negotiationState]}
+                      />
+                    </TableCell>
+                    <TableCell className="py-4 text-[13px] text-[#9CA3AF]">
+                      {dateFormatter.format(new Date(conversation.lastMessageAt))}
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <StatusBadge
+                        label={conversation.priority}
+                        tone={priorityTone[conversation.priority]}
+                      />
+                    </TableCell>
+                    <TableCell className="py-4 text-right">
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="h-8 rounded-[10px] border-[#243047] bg-[#172033] text-[#E5E7EB] hover:bg-[#243047]"
+                      >
+                        <Link href={`/conversations/${conversation.id}`}>Open</Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filteredConversations.length === 0 ? (
+                  <TableRow className="border-[#243047] hover:bg-transparent">
+                    <TableCell
+                      colSpan={6}
+                      className="px-5 py-10 text-center text-[14px] text-[#9CA3AF]"
+                    >
+                      No conversations match the current search and filter.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </section>
     </div>
+  )
+}
+
+function ConversationMiniCard({ conversation }: { conversation: Conversation }) {
+  return (
+    <Link
+      href={`/conversations/${conversation.id}`}
+      className="block rounded-[10px] border border-[#243047] bg-[#172033] p-3 transition-colors hover:border-[#3B82F6] hover:bg-[#1B263A]"
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <span className="text-[14px] font-semibold text-[#E5E7EB]">
+          {conversation.id}
+        </span>
+        <StatusBadge
+          label={conversation.priority}
+          tone={priorityTone[conversation.priority]}
+        />
+      </div>
+      <p className="line-clamp-2 text-[13px] leading-5 text-[#9CA3AF]">
+        {conversation.subject}
+      </p>
+      <div className="mt-3 flex max-w-[240px] flex-wrap gap-1.5">
+        {conversation.linkedSkus.map((sku) => (
+          <StatusBadge key={sku} label={sku} tone="default" />
+        ))}
+      </div>
+    </Link>
   )
 }

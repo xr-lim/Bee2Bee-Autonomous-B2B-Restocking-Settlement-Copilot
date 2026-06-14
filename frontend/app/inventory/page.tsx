@@ -1,14 +1,10 @@
-import { AlertTriangle, Boxes, PackageCheck } from "lucide-react"
-
 import { PageHeader } from "@/components/layout/page-header"
 import { InventoryTableClient } from "@/components/shared/inventory-table-client"
 import { RestockAlertPanel } from "@/components/shared/restock-alert-panel"
-import { StatCard } from "@/components/shared/stat-card"
 import { ThresholdChangeRequestList } from "@/components/shared/threshold-change-request-list"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  getInventorySummaryStats,
   getProducts,
   getRestockRecommendations,
   getSuppliers,
@@ -17,17 +13,9 @@ import {
 
 export const dynamic = "force-dynamic"
 
-const summaryIcons = [Boxes, AlertTriangle, PackageCheck]
-
 export default async function InventoryPage() {
-  const [
-    inventorySummaryStats,
-    products,
-    suppliers,
-    restockRecommendations,
-    thresholdChangeRequests,
-  ] = await Promise.all([
-    getInventorySummaryStats(),
+  const [products, suppliers, restockRecommendations, thresholdChangeRequests] =
+    await Promise.all([
     getProducts(),
     getSuppliers(),
     getRestockRecommendations(),
@@ -41,19 +29,6 @@ export default async function InventoryPage() {
         title="Inventory"
         description="Track stock levels and review what needs restocking."
       />
-
-      <section className="grid grid-cols-3 gap-4">
-        {inventorySummaryStats.map((stat, index) => (
-          <StatCard
-            key={stat.title}
-            title={stat.title}
-            value={stat.value}
-            change={stat.change}
-            tone={stat.tone}
-            icon={summaryIcons[index]}
-          />
-        ))}
-      </section>
 
       <Tabs defaultValue="all" className="gap-4">
         <TabsList

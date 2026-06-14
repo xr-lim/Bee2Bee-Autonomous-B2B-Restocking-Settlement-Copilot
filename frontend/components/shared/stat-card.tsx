@@ -28,30 +28,32 @@ export function StatCard({
   tone = "default",
 }: StatCardProps) {
   return (
-    <Card className="panel-surface rounded-3xl py-0 transition-transform duration-200 hover:-translate-y-0.5">
-      <CardContent className="p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-4">
+    <Card className="panel-surface min-h-[220px] rounded-3xl py-0 transition-transform duration-200 hover:-translate-y-0.5">
+      <CardContent className="flex h-full flex-col justify-between p-6 sm:p-7">
+        <div className="flex items-start justify-between gap-5">
           <div>
-            <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#94A3B8]">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-[#94A3B8]">
               {title}
             </p>
-            <p className="mt-3 text-[2rem] font-semibold leading-none text-[#F8FAFC] sm:text-[2.4rem]">
+            <p className="mt-5 text-[2.5rem] font-semibold leading-none text-[#F8FAFC] sm:text-[3rem]">
               {value}
             </p>
           </div>
           {Icon ? (
             <div
               className={cn(
-                "flex size-12 items-center justify-center rounded-2xl",
+                "flex size-14 items-center justify-center rounded-[18px]",
                 toneClassName[tone]
               )}
             >
-              <Icon className="size-5" aria-hidden="true" />
+              <Icon className="size-5.5" aria-hidden="true" />
             </div>
           ) : null}
         </div>
         {change ? (
-          <p className="mt-4 text-[13px] leading-6 text-[#94A3B8]">{change}</p>
+          <div className="mt-6 rounded-2xl border border-[#243047] bg-[#172033] px-4 py-3.5">
+            <p className="text-[13px] leading-6 text-[#94A3B8]">{change}</p>
+          </div>
         ) : null}
       </CardContent>
     </Card>

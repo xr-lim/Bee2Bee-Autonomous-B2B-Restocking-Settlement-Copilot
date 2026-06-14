@@ -5,10 +5,10 @@ import {
   FileWarning,
   MessageSquareText,
   PackageSearch,
+  Sparkles,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
-import { PageHeader } from "@/components/layout/page-header"
 import { StatCard } from "@/components/shared/stat-card"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
@@ -182,24 +182,72 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Bee2Bee overview"
-        title="Operations Dashboard"
-        description="See what needs action across stock, suppliers, and invoices."
-        actions={
-          <Button
-            asChild
-            className="h-10 rounded-2xl bg-[#FACC15] px-4 font-semibold text-[#111827] hover:bg-[#EAB308]"
-          >
-            <Link href="#priority-queue">
-              Review priority queue
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
-          </Button>
-        }
-      />
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.9fr)_360px]">
+        <Card className="panel-surface rounded-3xl py-0 shadow-none ring-0">
+          <CardContent className="p-6 sm:p-7">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#FACC15]/20 bg-[#FACC15]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#FCD34D]">
+                  <Sparkles className="size-3" aria-hidden="true" />
+                  Bee2Bee Overview
+                </div>
+                <h1 className="max-w-3xl text-[1.75rem] font-semibold leading-tight text-[#F8FAFC] sm:text-[2.15rem]">
+                  Operations Dashboard
+                </h1>
+                <p className="mt-2 max-w-2xl text-[14px] leading-6 text-[#94A3B8] sm:text-[15px]">
+                  See what needs action across stock, suppliers, and invoices.
+                </p>
+              </div>
 
-      <section className="grid gap-4 md:grid-cols-3">
+              <Button
+                asChild
+                className="h-11 shrink-0 rounded-2xl bg-[#FACC15] px-5 font-semibold text-[#111827] hover:bg-[#EAB308]"
+              >
+                <Link href="#priority-queue">
+                  Review priority queue
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </Button>
+            </div>
+
+          </CardContent>
+        </Card>
+
+        <Card className="panel-surface rounded-3xl py-0 shadow-none ring-0">
+          <CardHeader className="border-b border-[#243047] px-5 py-4">
+            <CardTitle className="text-[18px] font-semibold text-[#F8FAFC]">
+              Quick Actions
+            </CardTitle>
+            <p className="mt-1 text-[14px] text-[#94A3B8]">
+              Jump straight to the area you need.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3 p-5">
+            <QuickActionLink
+              href="/inventory"
+              title="Review stock"
+              body="Open product stock and restock suggestions."
+            />
+            <QuickActionLink
+              href="/conversations"
+              title="Open supplier inbox"
+              body="Reply to suppliers and review accepted deals."
+            />
+            <QuickActionLink
+              href="/invoice-management"
+              title="Review invoices"
+              body="Check invoices waiting for approval or payment."
+            />
+            <QuickActionLink
+              href="/suppliers"
+              title="Manage suppliers"
+              body="Update supplier records and SKU assignments."
+            />
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-3">
         {kpiCards.map((stat) => (
           <StatCard
             key={stat.title}
@@ -212,13 +260,13 @@ export default async function DashboardPage() {
         ))}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,2.25fr)_340px]">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,2.35fr)_320px]">
         <Card
           id="priority-queue"
           className="panel-surface rounded-3xl py-0 shadow-none ring-0"
         >
           <CardHeader className="border-b border-[#243047] px-5 py-4 sm:px-6">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle className="text-[20px] font-semibold text-[#F8FAFC]">
                   Priority Queue
@@ -227,10 +275,15 @@ export default async function DashboardPage() {
                   One place to review the next most important tasks.
                 </p>
               </div>
-              <StatusBadge
-                label={`${priorityQueue.length} items`}
-                tone={priorityQueue.length > 0 ? "warning" : "success"}
-              />
+              <div className="flex items-center gap-2">
+                <StatusBadge
+                  label={`${priorityQueue.length} items`}
+                  tone={priorityQueue.length > 0 ? "warning" : "success"}
+                />
+                <p className="text-[12px] text-[#64748B]">
+                  Sorted by current urgency
+                </p>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -296,39 +349,6 @@ export default async function DashboardPage() {
           <Card className="panel-surface rounded-3xl py-0 shadow-none ring-0">
             <CardHeader className="border-b border-[#243047] px-5 py-4">
               <CardTitle className="text-[18px] font-semibold text-[#F8FAFC]">
-                Quick Actions
-              </CardTitle>
-              <p className="mt-1 text-[14px] text-[#94A3B8]">
-                Jump straight to the area you need.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-3 p-5">
-              <QuickActionLink
-                href="/inventory"
-                title="Review stock"
-                body="Open product stock and restock suggestions."
-              />
-              <QuickActionLink
-                href="/conversations"
-                title="Open supplier inbox"
-                body="Reply to suppliers and review accepted deals."
-              />
-              <QuickActionLink
-                href="/invoice-management"
-                title="Review invoices"
-                body="Check invoices waiting for approval or payment."
-              />
-              <QuickActionLink
-                href="/suppliers"
-                title="Manage suppliers"
-                body="Update supplier records and SKU assignments."
-              />
-            </CardContent>
-          </Card>
-
-          <Card className="panel-surface rounded-3xl py-0 shadow-none ring-0">
-            <CardHeader className="border-b border-[#243047] px-5 py-4">
-              <CardTitle className="text-[18px] font-semibold text-[#F8FAFC]">
                 Today&apos;s Focus
               </CardTitle>
             </CardHeader>
@@ -348,6 +368,28 @@ export default async function DashboardPage() {
                 title="Invoice review"
                 value={`${invoicesNeedingAttention.length} invoice${invoicesNeedingAttention.length === 1 ? "" : "s"} still active`}
               />
+            </CardContent>
+          </Card>
+
+          <Card className="panel-surface rounded-3xl py-0 shadow-none ring-0">
+            <CardHeader className="border-b border-[#243047] px-5 py-4">
+              <CardTitle className="text-[18px] font-semibold text-[#F8FAFC]">
+                Operator Note
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 p-5">
+              <p className="text-[14px] leading-6 text-[#94A3B8]">
+                Start with the priority queue when you need the fastest path to action.
+                Use the quick actions above only when you already know which workflow you want.
+              </p>
+              <div className="rounded-2xl border border-[#243047] bg-[#172033] px-4 py-3">
+                <p className="text-[12px] uppercase tracking-[0.16em] text-[#64748B]">
+                  Recommended flow
+                </p>
+                <p className="mt-2 text-[14px] text-[#E5E7EB]">
+                  Stock review, then supplier response, then invoice approval.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>
