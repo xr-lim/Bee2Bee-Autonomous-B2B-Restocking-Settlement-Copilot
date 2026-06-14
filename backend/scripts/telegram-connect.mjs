@@ -24,6 +24,15 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function getHttpsTunnelUrl(tunnels) {
+  const httpsTunnel = tunnels.find(
+    (tunnel) =>
+      typeof tunnel.public_url === "string" &&
+      tunnel.public_url.startsWith("https://")
+  )
+  return httpsTunnel ? httpsTunnel.public_url.replace(/\/+$/, "") : null
+}
+
 async function fetchJson(url, options) {
   const response = await fetch(url, options)
   const text = await response.text()
@@ -49,7 +58,6 @@ async function configureNgrokAuthtoken() {
   console.log("Configuring ngrok authtoken...")
   await new Promise((resolve, reject) => {
     const child = spawn("ngrok", ["config", "add-authtoken", ngrokAuthtoken], {
-      shell: process.platform === "win32",
       stdio: ["ignore", "pipe", "pipe"],
     })
 
@@ -93,16 +101,18 @@ async function waitForBackend() {
 function startNgrok() {
   console.log(`Starting ngrok tunnel to http://localhost:${backendPort}...`)
   const child = spawn("ngrok", ["http", backendPort], {
-    shell: process.platform === "win32",
     stdio: ["ignore", "pipe", "pipe"],
   })
 
+  child.output = ""
   child.stdout.on("data", (chunk) => {
     const line = chunk.toString().trim()
+    child.output += chunk.toString()
     if (line) console.log(`[ngrok] ${line}`)
   })
   child.stderr.on("data", (chunk) => {
     const line = chunk.toString().trim()
+    child.output += chunk.toString()
     if (line) console.error(`[ngrok] ${line}`)
   })
   child.on("exit", (code) => {
@@ -115,26 +125,69 @@ function startNgrok() {
   return child
 }
 
-async function waitForNgrokPublicUrl() {
-  const apiUrl = "http://127.0.0.1:4040/api/tunnels"
+async function getNgrokApiState() {
+  const [tunnelsBody, statusBody] = await Promise.all([
+    fetchJson("http://127.0.0.1:4040/api/tunnels"),
+    fetchJson("http://127.0.0.1:4040/api/status").catch(() => ({})),
+  ])
+  const tunnels = Array.isArray(tunnelsBody.tunnels) ? tunnelsBody.tunnels : []
+
+  return {
+    status: typeof statusBody.status === "string" ? statusBody.status : null,
+    tunnels,
+    publicUrl: getHttpsTunnelUrl(tunnels),
+  }
+}
+
+async function getExistingNgrokPublicUrl() {
+  try {
+    const state = await getNgrokApiState()
+    if (state.publicUrl) {
+      console.log(`Using existing ngrok tunnel: ${state.publicUrl}`)
+      return state.publicUrl
+    }
+
+    const status = state.status ? ` Status: ${state.status}.` : ""
+    throw new Error(
+      `ngrok local API is already running at http://127.0.0.1:4040, but it has no HTTPS tunnel.${status} Stop the existing ngrok process and run this command again.`
+    )
+  } catch (error) {
+    if (error instanceof TypeError) return null
+    if (error instanceof Error && error.message.startsWith("fetch failed")) return null
+    throw error
+  }
+}
+
+async function waitForNgrokPublicUrl(ngrokProcess) {
+  let lastStatus = null
+  let lastTunnelCount = 0
 
   for (let attempt = 1; attempt <= 30; attempt += 1) {
-    try {
-      const body = await fetchJson(apiUrl)
-      const tunnels = Array.isArray(body.tunnels) ? body.tunnels : []
-      const httpsTunnel = tunnels.find(
-        (tunnel) =>
-          typeof tunnel.public_url === "string" &&
-          tunnel.public_url.startsWith("https://")
+    if (ngrokProcess.exitCode !== null) {
+      const output = ngrokProcess.output.trim()
+      throw new Error(
+        `ngrok exited before creating a tunnel with code ${ngrokProcess.exitCode}.${
+          output ? `\n${output}` : ""
+        }`
       )
-      if (httpsTunnel) return httpsTunnel.public_url.replace(/\/+$/, "")
+    }
+
+    try {
+      const state = await getNgrokApiState()
+      lastStatus = state.status
+      lastTunnelCount = state.tunnels.length
+      if (state.publicUrl) return state.publicUrl
     } catch {
       // ngrok's local API can take a moment to boot.
     }
     await delay(1000)
   }
 
-  throw new Error("Timed out waiting for ngrok local API at http://127.0.0.1:4040.")
+  throw new Error(
+    `Timed out waiting for ngrok to create an HTTPS tunnel. Last status: ${
+      lastStatus || "local API unavailable"
+    }; tunnels: ${lastTunnelCount}. If status is "reconnecting", run "ngrok diagnose" and check your internet connection, ngrok account/authtoken, or ngrok service status.`
+  )
 }
 
 async function registerTelegramWebhook(publicUrl) {
@@ -179,8 +232,17 @@ async function main() {
 
   await waitForBackend()
   await configureNgrokAuthtoken()
-  const ngrokProcess = startNgrok()
-  const publicUrl = await waitForNgrokPublicUrl()
+  let ngrokProcess = null
+  let publicUrl = await getExistingNgrokPublicUrl()
+  if (!publicUrl) {
+    ngrokProcess = startNgrok()
+    try {
+      publicUrl = await waitForNgrokPublicUrl(ngrokProcess)
+    } catch (error) {
+      ngrokProcess.kill()
+      throw error
+    }
+  }
   const webhookUrl = await registerTelegramWebhook(publicUrl)
 
   console.log("")
@@ -195,8 +257,10 @@ async function main() {
   await printWebhookInfo()
 
   const shutdown = () => {
-    console.log("\nStopping ngrok...")
-    ngrokProcess.kill()
+    if (ngrokProcess) {
+      console.log("\nStopping ngrok...")
+      ngrokProcess.kill()
+    }
     process.exit(0)
   }
   process.on("SIGINT", shutdown)
