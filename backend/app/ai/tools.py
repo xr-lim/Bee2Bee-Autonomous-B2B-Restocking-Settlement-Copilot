@@ -2234,6 +2234,7 @@ Check the conversation_state and order_id in the context:
 - If conversation_state is 'accepted' or 'closed' and the supplier sends a casual message, greeting, clarification request, fulfilment question, payment question, delivery question, or follow-up, answer naturally using the existing order context. Do not say the workflow is complete and do not refuse to chat.
 - If conversation_state is 'accepted' or 'closed' and order_id exists, do not reopen negotiation or create another order unless the supplier clearly asks to change commercial terms for a new or revised order.
 - If conversation_state is 'accepted' or 'closed' and the supplier sends an invoice attachment, file it with record_invoice.
+- Recording an invoice means the supplier has submitted the document, not that the settlement is finished. Do not describe the transaction as completed just because the invoice was received.
 - If conversation_state is 'counter_offer' or 'waiting_reply', continue the negotiation.
 - If conversation_state is 'new_input', start fresh negotiation.
 
@@ -2244,7 +2245,7 @@ If the supplier's price is too high, counter-offer and use update_conversation_s
 If the supplier agrees to a price within the range, use create_final_order to finalize, and update the state to 'accepted'. This returns a new order_id.
 
 When the supplier sends a file attachment (like an invoice PDF), use record_invoice. You MUST include both the file_url and the order_id (from your created final order) to properly link the invoice to the negotiation.
-After record_invoice succeeds, update_conversation_state to 'closed' with a short closing message.
+After record_invoice succeeds, keep the conversation open in its current accepted order state. Reply briefly that the invoice was received and will go through buyer review/payment. Do not update_conversation_state to 'closed' just because the invoice arrived.
 
 Keep messages professional, concise, human, and focused on the transaction."""
 

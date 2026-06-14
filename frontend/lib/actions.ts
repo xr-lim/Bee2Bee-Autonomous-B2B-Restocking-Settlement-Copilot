@@ -4118,6 +4118,47 @@ async function getInvoiceWorkflowProductSku(
   return workflowProduct?.sku as string | undefined
 }
 
+async function getWorkflowConversationId(
+  supabase: AppSupabaseClient,
+  workflowId?: string | null
+) {
+  if (!workflowId) {
+    return undefined
+  }
+
+  const workflow = await throwIfSupabaseError(
+    await supabase
+      .from("workflows")
+      .select("conversation_id")
+      .eq("id", workflowId)
+      .single()
+  )
+
+  return workflow?.conversation_id as string | undefined
+}
+
+async function closeWorkflowConversationOnSettlement(
+  supabase: AppSupabaseClient,
+  workflowId?: string | null
+) {
+  const conversationId = await getWorkflowConversationId(supabase, workflowId)
+  if (!conversationId) {
+    return undefined
+  }
+
+  await throwIfSupabaseError(
+    await supabase
+      .from("conversations")
+      .update({
+        state: "closed",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversationId)
+  )
+
+  return conversationId
+}
+
 async function syncInvoiceWorkflowState(
   supabase: AppSupabaseClient,
   invoice: {
@@ -4140,6 +4181,7 @@ async function syncInvoiceWorkflowState(
     supabase,
     invoice.workflow_id
   )
+  let workflowConversationId: string | undefined
 
   await throwIfSupabaseError(
     await supabase
@@ -4165,6 +4207,11 @@ async function syncInvoiceWorkflowState(
           .from("restock_requests")
           .delete()
           .eq("workflow_id", invoice.workflow_id)
+      )
+
+      workflowConversationId = await closeWorkflowConversationOnSettlement(
+        supabase,
+        invoice.workflow_id
       )
     } else if (options.workflowState && options.workflowApprovalState) {
       await throwIfSupabaseError(
@@ -4211,6 +4258,10 @@ async function syncInvoiceWorkflowState(
   )
 
   revalidateInvoicePaths(invoice.id, workflowProductSku)
+  revalidatePath("/conversations")
+  if (workflowConversationId) {
+    revalidatePath(`/conversations/${workflowConversationId}`)
+  }
   return workflowProductSku
 }
 
@@ -4402,6 +4453,7 @@ export async function setInvoiceDecisionAction(
       throw new Error("Invoice no longer exists.")
     }
     let workflowProductSku: string | undefined
+    let workflowConversationId: string | undefined
 
     const stateByDecision = {
       approve: {
@@ -4487,6 +4539,11 @@ export async function setInvoiceDecisionAction(
             .delete()
             .eq("workflow_id", invoice.workflow_id)
         )
+
+        workflowConversationId = await closeWorkflowConversationOnSettlement(
+          supabase,
+          invoice.workflow_id
+        )
       } else {
         await throwIfSupabaseError(
           await supabase
@@ -4514,6 +4571,10 @@ export async function setInvoiceDecisionAction(
     revalidatePath("/invoice-management")
     revalidatePath("/invoice-management/completed")
     revalidatePath(`/invoice-management/${invoice.id}`)
+    revalidatePath("/conversations")
+    if (workflowConversationId) {
+      revalidatePath(`/conversations/${workflowConversationId}`)
+    }
     if (workflowProductSku) {
       revalidatePath(`/inventory/${workflowProductSku}`)
     }

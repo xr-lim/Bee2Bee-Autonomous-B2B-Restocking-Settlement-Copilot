@@ -85,7 +85,7 @@ async def run_negotiation_agent(
             if file_type:
                 attachment_bits.append(f"File type: {file_type}.")
             attachment_bits.append(
-                "If this is an invoice attachment and the order is already accepted, use record_invoice to register it."
+                "If this is an invoice attachment and the order is already accepted, use record_invoice to register it. Do not close the conversation when the invoice is received; settlement happens later after buyer review/payment."
             )
             input_parts.append(" ".join(attachment_bits))
 
@@ -383,18 +383,6 @@ async def run_negotiation_agent(
                         result = create_final_order.invoke(tool_input)
                     elif tool_name == "record_invoice":
                         result = record_invoice.invoke(tool_input)
-                        # Close the loop once the invoice is recorded.
-                        try:
-                            update_conversation_state.invoke(
-                                {
-                                    "conversation_id": conversation_id,
-                                    "new_state": "closed",
-                                    "message": "Invoice recorded. Negotiation closed.",
-                                }
-                            )
-                        except Exception:
-                            # Best-effort; avoid failing the agent response if the state update fails.
-                            pass
                     else:
                         result = f"Unknown tool: {tool_name}"
 
