@@ -13,7 +13,11 @@ from sqlalchemy import text
 from app.api.v1.routes_negotiation import process_supplier_reply
 from app.core.config import TELEGRAM_ENABLED, TELEGRAM_WEBHOOK_SECRET
 from app.db.session import SessionLocal
-from app.services.telegram_service import download_telegram_file, get_telegram_file
+from app.services.telegram_service import (
+    download_telegram_file,
+    get_telegram_file,
+    send_telegram_text,
+)
 
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])
@@ -63,6 +67,208 @@ def _resolve_supplier_by_chat_id(chat_id: str) -> dict[str, Any] | None:
             ),
             {"chat_id": chat_id},
         ).mappings().first()
+
+
+def _resolve_supplier_by_id(supplier_id: str) -> dict[str, Any] | None:
+    with SessionLocal() as db:
+        return db.execute(
+            text(
+                """
+                SELECT id, name, telegram_chat_id
+                FROM suppliers
+                WHERE id = :supplier_id
+                """
+            ),
+            {"supplier_id": supplier_id},
+        ).mappings().first()
+
+
+def _available_supplier_phone_columns() -> list[str]:
+    with SessionLocal() as db:
+        rows = db.execute(
+            text(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'suppliers'
+                  AND column_name IN ('phone_number', 'contact_phone')
+                ORDER BY column_name
+                """
+            )
+        ).scalars().all()
+    return [str(value) for value in rows]
+
+
+def _normalize_phone_number(value: str) -> str:
+    return "".join(char for char in value if char.isdigit())
+
+
+def _resolve_supplier_by_phone_number(
+    phone_number: str,
+) -> tuple[dict[str, Any] | None, str]:
+    columns = _available_supplier_phone_columns()
+    if not columns:
+        return None, "missing_phone_columns"
+
+    where_clause = " OR ".join(
+        f"regexp_replace(coalesce({column_name}, ''), '[^0-9]', '', 'g') = :phone_number"
+        for column_name in columns
+    )
+    with SessionLocal() as db:
+        supplier = db.execute(
+            text(
+                f"""
+                SELECT id, name, telegram_chat_id
+                FROM suppliers
+                WHERE {where_clause}
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT 1
+                """
+            ),
+            {"phone_number": phone_number},
+        ).mappings().first()
+    return supplier, "/".join(columns)
+
+
+def _link_supplier_to_chat_id(supplier_id: str, chat_id: str) -> None:
+    with SessionLocal() as db:
+        db.execute(
+            text(
+                """
+                UPDATE suppliers
+                SET telegram_chat_id = NULL,
+                    updated_at = now()
+                WHERE telegram_chat_id = :chat_id
+                  AND id <> :supplier_id
+                """
+            ),
+            {"chat_id": chat_id, "supplier_id": supplier_id},
+        )
+        db.execute(
+            text(
+                """
+                UPDATE suppliers
+                SET telegram_chat_id = :chat_id,
+                    updated_at = now()
+                WHERE id = :supplier_id
+                """
+            ),
+            {"chat_id": chat_id, "supplier_id": supplier_id},
+        )
+        db.commit()
+
+
+def _parse_telegram_command(text_message: str) -> tuple[str | None, list[str]]:
+    normalized = text_message.strip()
+    if not normalized.startswith("/"):
+        return None, []
+
+    parts = normalized.split()
+    if not parts:
+        return None, []
+
+    command = parts[0].split("@", 1)[0].lower()
+    return command, parts[1:]
+
+
+async def _reply_to_telegram_chat(chat_id: str, message: str) -> dict[str, Any]:
+    result = await send_telegram_text(chat_id, message)
+    logger.info(
+        "telegram command reply chat_id=%s ok=%s status_code=%s",
+        chat_id,
+        result.get("ok"),
+        result.get("status_code"),
+    )
+    return result
+
+
+async def _handle_link_command(
+    *,
+    chat_id: str,
+    lookup_type: str,
+    supplier: dict[str, Any] | None,
+    usage_message: str,
+    failure_reason: str | None = None,
+) -> dict[str, Any]:
+    logger.info(
+        "telegram command detected command=%s chat_id=%s supplier_lookup_type=%s supplier_id=%s reason=%s",
+        "link" if lookup_type == "supplier_id" else "link_phone",
+        chat_id,
+        lookup_type,
+        supplier.get("id") if supplier else None,
+        failure_reason,
+    )
+    print(
+        "command detected=",
+        "link" if lookup_type == "supplier_id" else "link_phone",
+        "chat_id=",
+        chat_id,
+        "supplier lookup type=",
+        lookup_type,
+        "supplier_id=",
+        supplier.get("id") if supplier else None,
+        "reason=",
+        failure_reason,
+    )
+
+    if failure_reason == "invalid_format":
+        await _reply_to_telegram_chat(chat_id, usage_message)
+        return {"status": "ok", "reason": "invalid_command_format"}
+
+    if not supplier:
+        await _reply_to_telegram_chat(
+            chat_id,
+            "Supplier not found. Please check the supplier ID or phone number.",
+        )
+        return {"status": "ok", "reason": failure_reason or "supplier_not_found"}
+
+    _link_supplier_to_chat_id(str(supplier["id"]), chat_id)
+    supplier_label = str(supplier.get("name") or supplier.get("id") or "").strip()
+    await _reply_to_telegram_chat(
+        chat_id,
+        f"Linked successfully to supplier {supplier_label}.",
+    )
+    logger.info(
+        "telegram command link_success chat_id=%s supplier_lookup_type=%s supplier_id=%s",
+        chat_id,
+        lookup_type,
+        supplier["id"],
+    )
+    return {
+        "status": "ok",
+        "reason": "supplier_linked",
+        "supplier_id": supplier["id"],
+    }
+
+
+async def _handle_whoami_command(chat_id: str) -> dict[str, Any]:
+    supplier = _resolve_supplier_by_chat_id(chat_id)
+    logger.info(
+        "telegram command detected command=/whoami chat_id=%s supplier_lookup_type=chat_id supplier_id=%s",
+        chat_id,
+        supplier.get("id") if supplier else None,
+    )
+    print(
+        "command detected=",
+        "/whoami",
+        "chat_id=",
+        chat_id,
+        "supplier lookup type=",
+        "chat_id",
+        "supplier_id=",
+        supplier.get("id") if supplier else None,
+    )
+    if supplier:
+        supplier_label = str(supplier.get("name") or supplier.get("id") or "").strip()
+        message = (
+            f"chat_id: {chat_id}\n"
+            f"Linked supplier: {supplier_label} ({supplier['id']})"
+        )
+    else:
+        message = f"chat_id: {chat_id}\nLinked supplier: none"
+    await _reply_to_telegram_chat(chat_id, message)
+    return {"status": "ok", "reason": "whoami_replied"}
 
 
 def _list_supplier_conversations(supplier_id: str) -> list[dict[str, Any]]:
@@ -374,6 +580,50 @@ async def telegram_webhook(
         logger.info("telegram inbound skip reason=missing_chat_id")
         return {"status": "skipped", "reason": "missing_chat_id"}
 
+    text_message = str(message.get("text") or "").strip()
+    command, command_args = _parse_telegram_command(text_message)
+    if command in {"/link", "/link_phone", "/whoami"}:
+        if command == "/whoami":
+            return await _handle_whoami_command(chat_id)
+
+        usage_message = "/link sup-my-001\n/link_phone 60167716713"
+        if len(command_args) != 1:
+            return await _handle_link_command(
+                chat_id=chat_id,
+                lookup_type="supplier_id" if command == "/link" else "phone_number",
+                supplier=None,
+                usage_message=usage_message,
+                failure_reason="invalid_format",
+            )
+
+        if command == "/link":
+            supplier = _resolve_supplier_by_id(command_args[0].strip())
+            return await _handle_link_command(
+                chat_id=chat_id,
+                lookup_type="supplier_id",
+                supplier=supplier,
+                usage_message=usage_message,
+                failure_reason=None if supplier else "supplier_not_found",
+            )
+
+        normalized_phone = _normalize_phone_number(command_args[0])
+        if not normalized_phone:
+            return await _handle_link_command(
+                chat_id=chat_id,
+                lookup_type="phone_number",
+                supplier=None,
+                usage_message=usage_message,
+                failure_reason="invalid_format",
+            )
+        supplier, lookup_type = _resolve_supplier_by_phone_number(normalized_phone)
+        return await _handle_link_command(
+            chat_id=chat_id,
+            lookup_type=lookup_type,
+            supplier=supplier,
+            usage_message=usage_message,
+            failure_reason=None if supplier else "supplier_not_found",
+        )
+
     supplier = _resolve_supplier_by_chat_id(chat_id)
     if not supplier:
         print("skip reason=supplier_not_found", "chat_id=", chat_id)
@@ -385,7 +635,6 @@ async def telegram_webhook(
         supplier["id"],
     )
 
-    text_message = str(message.get("text") or "").strip()
     caption = str(message.get("caption") or "").strip() or None
     incoming_message_type = (
         "document" if isinstance(document, dict) else "text" if text_message else "other"
