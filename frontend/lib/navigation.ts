@@ -4,6 +4,7 @@ import {
   PackageSearch,
   ReceiptText,
   Settings,
+  SlidersHorizontal,
   Truck,
 } from "lucide-react"
 
@@ -21,6 +22,12 @@ export const navigationItems: NavigationItem[] = [
     shortTitle: "Stock",
     href: "/inventory",
     icon: PackageSearch,
+  },
+  {
+    title: "Thresholds",
+    shortTitle: "Tune",
+    href: "/thresholds",
+    icon: SlidersHorizontal,
   },
   {
     title: "Conversations",

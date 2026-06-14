@@ -76,6 +76,23 @@ type ThresholdAnalysisActionResult = ActionResult & {
   }>
 }
 
+export type AiAnalysisMode = "manual" | "on-login" | "scheduled"
+export type AiAnalysisCadence = "daily" | "weekly" | "monthly"
+export type AiAnalysisScope = "threshold" | "restock" | "both"
+
+export type AiAnalysisPreferences = {
+  mode: AiAnalysisMode
+  cadence: AiAnalysisCadence
+  scope: AiAnalysisScope
+  lastRunAt: string | null
+}
+
+type AiAnalysisPreferencesPayload = {
+  mode: AiAnalysisMode
+  cadence: AiAnalysisCadence
+  scope: AiAnalysisScope
+}
+
 type ProductPayload = {
   sku: string
   name: string
@@ -113,6 +130,10 @@ type ThresholdDecisionPayload = {
   decision: "approved" | "rejected"
   proposedThreshold: number
   reason: string
+}
+
+type BulkThresholdDecisionPayload = {
+  requestIds: string[]
 }
 
 type ThresholdUpdatePayload = {
@@ -505,8 +526,40 @@ function revalidateProductPaths(sku?: string) {
   revalidatePath("/")
   revalidatePath("/dashboard")
   revalidatePath("/inventory")
+  revalidatePath("/thresholds")
   revalidatePath("/suppliers")
   if (sku) revalidatePath(`/inventory/${sku}`)
+}
+
+const DEFAULT_AI_ANALYSIS_PREFERENCES: AiAnalysisPreferences = {
+  mode: "manual",
+  cadence: "daily",
+  scope: "both",
+  lastRunAt: null,
+}
+
+function normalizeAiAnalysisPreferences(row: Record<string, unknown> | null): AiAnalysisPreferences {
+  return {
+    mode:
+      row?.mode === "manual" ||
+      row?.mode === "on-login" ||
+      row?.mode === "scheduled"
+        ? row.mode
+        : DEFAULT_AI_ANALYSIS_PREFERENCES.mode,
+    cadence:
+      row?.cadence === "daily" ||
+      row?.cadence === "weekly" ||
+      row?.cadence === "monthly"
+        ? row.cadence
+        : DEFAULT_AI_ANALYSIS_PREFERENCES.cadence,
+    scope:
+      row?.scope === "threshold" ||
+      row?.scope === "restock" ||
+      row?.scope === "both"
+        ? row.scope
+        : DEFAULT_AI_ANALYSIS_PREFERENCES.scope,
+    lastRunAt: typeof row?.last_run_at === "string" ? row.last_run_at : null,
+  }
 }
 
 function revalidateInvoicePaths(invoiceId: string, sku?: string) {
@@ -1607,6 +1660,88 @@ export async function analyzeRestockSuggestionsAction(): Promise<ThresholdAnalys
   }
 }
 
+export async function getAiAnalysisPreferencesAction(): Promise<AiAnalysisPreferences> {
+  try {
+    const supabase = requireSupabase()
+    const row = await throwIfSupabaseError(
+      await supabase
+        .from("ai_analysis_preferences")
+        .select("mode,cadence,scope,last_run_at")
+        .eq("id", "default")
+        .maybeSingle()
+    )
+
+    if (row) {
+      return normalizeAiAnalysisPreferences(row)
+    }
+
+    const created = await throwIfSupabaseError(
+      await supabase
+        .from("ai_analysis_preferences")
+        .insert({ id: "default" })
+        .select("mode,cadence,scope,last_run_at")
+        .single()
+    )
+
+    return normalizeAiAnalysisPreferences(created)
+  } catch (error) {
+    if (isMissingSupabaseColumnError(error, "ai_analysis_preferences", "mode")) {
+      return DEFAULT_AI_ANALYSIS_PREFERENCES
+    }
+    return DEFAULT_AI_ANALYSIS_PREFERENCES
+  }
+}
+
+export async function saveAiAnalysisPreferencesAction(
+  payload: AiAnalysisPreferencesPayload
+): Promise<ActionResult> {
+  try {
+    const supabase = requireSupabase()
+
+    await throwIfSupabaseError(
+      await supabase
+        .from("ai_analysis_preferences")
+        .upsert(
+          {
+            id: "default",
+            mode: payload.mode,
+            cadence: payload.cadence,
+            scope: payload.scope,
+          },
+          { onConflict: "id" }
+        )
+    )
+
+    revalidatePath("/settings")
+    return success("AI analysis preferences saved.")
+  } catch (error) {
+    return failure(error)
+  }
+}
+
+export async function markAiAnalysisRunAction(): Promise<ActionResult> {
+  try {
+    const supabase = requireSupabase()
+
+    await throwIfSupabaseError(
+      await supabase
+        .from("ai_analysis_preferences")
+        .upsert(
+          {
+            id: "default",
+            last_run_at: new Date().toISOString(),
+          },
+          { onConflict: "id" }
+        )
+    )
+
+    revalidatePath("/settings")
+    return success("AI analysis run recorded.")
+  } catch (error) {
+    return failure(error)
+  }
+}
+
 export async function createProductAction(
   payload: ProductPayload
 ): Promise<ActionResult> {
@@ -2099,6 +2234,89 @@ export async function decideThresholdRequestAction(
       payload.decision === "approved"
         ? "Threshold applied and request cleared."
         : "Threshold request rejected and cleared."
+    )
+  } catch (error) {
+    return failure(error)
+  }
+}
+
+export async function approvePendingThresholdRequestsAction(
+  payload: BulkThresholdDecisionPayload
+): Promise<ActionResult> {
+  try {
+    const supabase = requireSupabase()
+    const requestIds = Array.from(new Set(payload.requestIds.filter(Boolean)))
+
+    if (requestIds.length === 0) {
+      throw new Error("No pending threshold requests selected.")
+    }
+
+    const requests = await throwIfSupabaseError(
+      await supabase
+        .from("threshold_change_requests")
+        .select("id,product_id,proposed_threshold,status")
+        .in("id", requestIds)
+        .eq("status", "pending")
+    )
+
+    if (!requests || requests.length === 0) {
+      throw new Error("No pending threshold requests are still available.")
+    }
+
+    const productIds = Array.from(
+      new Set(requests.map((request) => request.product_id).filter(Boolean))
+    )
+    const products = await throwIfSupabaseError(
+      await supabase
+        .from("products")
+        .select("id,sku,current_stock")
+        .in("id", productIds)
+    )
+    const productRows = products ?? []
+    const productLookup = new Map(
+      productRows.map((product) => [product.id, product])
+    )
+
+    for (const request of requests) {
+      const product = productLookup.get(request.product_id)
+      if (!product) continue
+
+      await throwIfSupabaseError(
+        await supabase
+          .from("products")
+          .update({
+            current_threshold: request.proposed_threshold,
+            status: stockStatus(product.current_stock, request.proposed_threshold),
+          })
+          .eq("id", product.id)
+      )
+
+      await syncAutoRestockRequestForProduct(supabase, {
+        productId: product.id,
+        sku: product.sku,
+        triggerSource: "threshold_update",
+      })
+    }
+
+    await throwIfSupabaseError(
+      await supabase
+        .from("threshold_change_requests")
+        .delete()
+        .in(
+          "id",
+          requests.map((request) => request.id)
+        )
+    )
+
+    for (const product of productRows) {
+      revalidateProductPaths(product.sku)
+    }
+    revalidatePath("/thresholds")
+
+    return success(
+      `Applied ${requests.length} threshold update${
+        requests.length === 1 ? "" : "s"
+      }.`
     )
   } catch (error) {
     return failure(error)
@@ -3830,8 +4048,18 @@ export async function analyzeInvoiceAction(
       validationInvoiceData,
       context.expectedData
     )
-    const effectiveIssues = validationItems.effectiveItems.map((item) => item.issue)
-    const effectiveValidationRows = validationItems.effectiveItems.map((item) => ({
+    const aiValidationChecks = Array.isArray(analysis.validationChecks)
+      ? analysis.validationChecks.filter((check) => check.checkName?.trim())
+      : []
+    const aiValidationRows = aiValidationChecks.map((check) => ({
+      id: id("ivr"),
+      invoice_id: context.invoice.id,
+      check_name: check.checkName.trim(),
+      expected_value: check.expectedValue ?? null,
+      actual_value: check.actualValue ?? null,
+      result: check.result,
+    }))
+    const generatedValidationRows = validationItems.effectiveItems.map((item) => ({
       id: id("ivr"),
       invoice_id: context.invoice.id,
       check_name: item.row.checkName,
@@ -3842,10 +4070,32 @@ export async function analyzeInvoiceAction(
           ? item.row.result
           : "failed",
     }))
+    const effectiveValidationRows =
+      aiValidationRows.length > 0 ? aiValidationRows : generatedValidationRows
+    const aiIssueRows = aiValidationRows.filter((row) => row.result !== "passed")
+    const effectiveIssues =
+      aiValidationRows.length > 0
+        ? analysis.issues.length > 0
+          ? analysis.issues
+          : aiIssueRows.map((row) => ({
+              type: "other" as const,
+              description:
+                row.actual_value ??
+                `${row.check_name} did not match expected value.`,
+              severity: row.result === "failed" ? ("high" as const) : ("medium" as const),
+            }))
+        : validationItems.effectiveItems.map((item) => item.issue)
     const validationStatus = validationStatusFromIssues(effectiveIssues)
     const recomputedRiskLevel = riskLevelFromIssues(effectiveIssues)
     const summaryDetails = buildInvoiceValidationSummary(
-      validationItems.effectiveItems.map((item) => item.row),
+      aiValidationRows.length > 0
+        ? aiIssueRows.map((row) => ({
+            checkName: row.check_name,
+            expectedValue: row.expected_value,
+            actualValue: row.actual_value,
+            result: row.result,
+          }))
+        : validationItems.effectiveItems.map((item) => item.row),
       {
         fallbackOnly: usedFallback,
       }
@@ -3856,12 +4106,11 @@ export async function analyzeInvoiceAction(
       "[Invoice Validation] recompute",
       debugSerialize({
         invoiceId: context.invoice.id,
-        validationChecksUsed: validationItems.candidateItems.map((item) => ({
-          checkName: item.row.checkName,
-          result: item.row.result,
-          expectedValue: item.row.expectedValue ?? null,
-          actualValue: item.row.actualValue ?? null,
-          resolved: item.resolved,
+        validationChecksUsed: effectiveValidationRows.map((row) => ({
+          checkName: row.check_name,
+          result: row.result,
+          expectedValue: row.expected_value ?? null,
+          actualValue: row.actual_value ?? null,
         })),
         mismatchListBeforeRecompute: validationItems.candidateItems.map((item) =>
           item.row.actualValue ?? item.row.checkName
@@ -3878,7 +4127,6 @@ export async function analyzeInvoiceAction(
         .from("invoice_validation_results")
         .delete()
         .eq("invoice_id", context.invoice.id)
-        .like("check_name", "ai_%")
     )
 
     if (effectiveValidationRows.length > 0) {

@@ -24,6 +24,7 @@ drop table if exists public.product_stock_demand_trends cascade;
 drop table if exists public.product_suppliers cascade;
 drop table if exists public.products cascade;
 drop table if exists public.suppliers cascade;
+drop table if exists public.ai_analysis_preferences cascade;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -55,6 +56,25 @@ create table public.suppliers (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create table public.ai_analysis_preferences (
+  id text primary key default 'default' check (id = 'default'),
+  mode text not null default 'manual' check (
+    mode in ('manual', 'on-login', 'scheduled')
+  ),
+  cadence text not null default 'daily' check (
+    cadence in ('daily', 'weekly', 'monthly')
+  ),
+  scope text not null default 'both' check (
+    scope in ('threshold', 'restock', 'both')
+  ),
+  last_run_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into public.ai_analysis_preferences (id)
+values ('default');
 
 create table public.products (
   id text primary key,
@@ -353,6 +373,10 @@ create table public.invoice_actions (
 
 create trigger set_suppliers_updated_at
 before update on public.suppliers
+for each row execute function public.set_updated_at();
+
+create trigger set_ai_analysis_preferences_updated_at
+before update on public.ai_analysis_preferences
 for each row execute function public.set_updated_at();
 
 create trigger set_products_updated_at

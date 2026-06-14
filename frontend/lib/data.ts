@@ -19,6 +19,7 @@ import {
 } from "@/lib/supplier-language"
 import {
   buildInvoiceValidationSummary,
+  humanizeInvoiceCheckName,
   isResolvedInvoiceCheck,
 } from "@/lib/invoice-validation"
 
@@ -42,6 +43,8 @@ type InsightCards = {
     replenishmentOrders: number
   }
 }
+
+type InvoiceValidationDisplayCheck = NonNullable<Invoice["validationChecks"]>[number]
 
 type StockTrendPoint = {
   date: string
@@ -1183,6 +1186,75 @@ function mapMessages(
   })
 }
 
+function invoiceValidationRowLabel(check: RawInvoiceValidationResult) {
+  const checkName = check.checkName.toLowerCase()
+  const actualValue = check.actualValue ?? ""
+
+  if (/supplier/.test(checkName) || /supplier/.test(actualValue)) return "Supplier Info"
+  if (/quantity/.test(checkName) || /quantity/.test(actualValue)) return "Quantity"
+  if (/currency/.test(checkName) || /currency/.test(actualValue)) return "Currency"
+  if (/unit.?price|price/.test(checkName) || /unit price/.test(actualValue)) return "Unit Price"
+  if (/amount|total|subtotal/.test(checkName) || /amount|total|subtotal/.test(actualValue)) {
+    return "Amount"
+  }
+  if (/bank/.test(checkName) || /bank/.test(actualValue)) return "Bank Details"
+  if (/payment/.test(checkName) || /payment/.test(actualValue)) return "Payment Terms"
+  if (/invoice.?number/.test(checkName) || /invoice number/.test(actualValue)) {
+    return "Invoice Number"
+  }
+
+  return humanizeInvoiceCheckName(check.checkName)
+}
+
+function invoiceValidationRowState(
+  check: RawInvoiceValidationResult
+): InvoiceValidationDisplayCheck["state"] {
+  if (check.result === "passed") return "match"
+  if (check.result === "warning" || check.result === "failed") return "mismatch"
+  return "unchecked"
+}
+
+function compactInvoiceValidationRows(
+  checks: RawInvoiceValidationResult[]
+): InvoiceValidationDisplayCheck[] {
+  const rows = checks.map((check) => ({
+    check: invoiceValidationRowLabel(check),
+    expected: check.expectedValue?.trim() || "System reference unavailable",
+    actual: check.actualValue?.trim() || "Not provided",
+    state: invoiceValidationRowState(check),
+  }))
+
+  const rowByCheck = new Map<string, InvoiceValidationDisplayCheck>()
+  for (const row of rows) {
+    const current = rowByCheck.get(row.check)
+    if (!current || (current.state !== "mismatch" && row.state === "mismatch")) {
+      rowByCheck.set(row.check, row)
+    }
+  }
+
+  return Array.from(rowByCheck.values())
+}
+
+function mergeInvoiceValidationRows(
+  fallbackRows: InvoiceValidationDisplayCheck[],
+  validationRows: InvoiceValidationDisplayCheck[]
+) {
+  const rowByCheck = new Map<string, InvoiceValidationDisplayCheck>()
+
+  for (const row of fallbackRows) {
+    rowByCheck.set(row.check, row)
+  }
+
+  for (const row of validationRows) {
+    const current = rowByCheck.get(row.check)
+    if (!current || current.state !== "mismatch" || row.state === "mismatch") {
+      rowByCheck.set(row.check, row)
+    }
+  }
+
+  return Array.from(rowByCheck.values())
+}
+
 function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[] {
   const productById = new Map(rows.products.map((product) => [product.id, product]))
   const workflowById = new Map(rows.workflows.map((workflow) => [workflow.id, workflow]))
@@ -1339,6 +1411,40 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
         /supplier/i.test(check.checkName) ||
         (/missing_field/i.test(check.checkName) && /supplier/i.test(check.actualValue ?? ""))
       )
+    const validationChecks = compactInvoiceValidationRows(activeChecks)
+    const fallbackValidationChecks: InvoiceValidationDisplayCheck[] = [
+      {
+        check: "Amount",
+        expected: expectedAmountLabel,
+        actual: formatCurrencyLabel(invoice.currency, Number(invoice.amount)),
+        state: amountMismatch ? "mismatch" : "match",
+      },
+      {
+        check: "Quantity",
+        expected: expectedQuantity.toLocaleString("en-US"),
+        actual: invoiceQuantity.toLocaleString("en-US"),
+        state:
+          expectedQuantity > 0 && invoiceQuantity === expectedQuantity
+            ? "match"
+            : "mismatch",
+      },
+      {
+        check: "Supplier Info",
+        expected: expectedSupplierName,
+        actual: currentSupplierName,
+        state: supplierInconsistency ? "mismatch" : "match",
+      },
+      {
+        check: "Currency",
+        expected: expectedCurrency,
+        actual: invoice.currency,
+        state:
+          expectedCurrency.trim().toLowerCase() ===
+          invoice.currency.trim().toLowerCase()
+            ? "match"
+            : "mismatch",
+      },
+    ]
     const summaryDetails = buildInvoiceValidationSummary(unresolvedChecks, {
       fallbackOnly:
         !invoice.aiLastAnalyzedAt &&
@@ -1433,6 +1539,10 @@ function mapInvoices(rows: Awaited<ReturnType<typeof getDomainRows>>): Invoice[]
         missingFields,
         supplierInconsistency,
       },
+      validationChecks: mergeInvoiceValidationRows(
+        fallbackValidationChecks,
+        validationChecks
+      ),
       mismatches: summaryDetails.mismatches,
       history: actions.map((action) => ({
         timestamp: action.createdAt ?? "",

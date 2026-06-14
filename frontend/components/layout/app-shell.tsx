@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import { PageTransition } from "@/components/layout/page-transition"
 import { SidebarNav } from "@/components/layout/sidebar-nav"
 import { TopHeader } from "@/components/layout/top-header"
+import { AutoAiAnalysisRunner } from "@/components/shared/ai-analysis-preferences"
 
 type AppShellProps = {
   children: ReactNode
@@ -14,13 +15,14 @@ type AppShellProps = {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname()
 
-  // Detach system shell for the chat interfaces
-  if (pathname?.startsWith("/chat")) {
+  // Detach system shell for standalone experiences.
+  if (pathname?.startsWith("/chat") || pathname === "/login") {
     return <div className="min-h-screen bg-[#0B1020] text-[#E5E7EB]">{children}</div>
   }
 
   return (
     <div className="min-h-screen bg-[#0B1020] text-[#E5E7EB]">
+      <AutoAiAnalysisRunner />
       <div className="flex min-h-screen">
         <SidebarNav />
         <div className="flex min-w-0 flex-1 flex-col">

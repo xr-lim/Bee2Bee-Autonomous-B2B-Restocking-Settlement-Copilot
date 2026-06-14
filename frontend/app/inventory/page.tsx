@@ -1,25 +1,21 @@
 import { PageHeader } from "@/components/layout/page-header"
 import { InventoryTableClient } from "@/components/shared/inventory-table-client"
 import { RestockAlertPanel } from "@/components/shared/restock-alert-panel"
-import { ThresholdChangeRequestList } from "@/components/shared/threshold-change-request-list"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   getProducts,
   getRestockRecommendations,
   getSuppliers,
-  getThresholdChangeRequests,
 } from "@/lib/data"
 
 export const dynamic = "force-dynamic"
 
 export default async function InventoryPage() {
-  const [products, suppliers, restockRecommendations, thresholdChangeRequests] =
-    await Promise.all([
+  const [products, suppliers, restockRecommendations] = await Promise.all([
     getProducts(),
     getSuppliers(),
     getRestockRecommendations(),
-    getThresholdChangeRequests(),
   ])
 
   return (
@@ -33,7 +29,7 @@ export default async function InventoryPage() {
       <Tabs defaultValue="all" className="gap-4">
         <TabsList
           variant="line"
-          className="w-full justify-start gap-2 overflow-x-auto rounded-2xl border border-[#243047] bg-[#111827] p-2"
+          className="h-auto w-full justify-start gap-2 overflow-hidden rounded-2xl border border-[#243047] bg-[#111827] p-2"
         >
           <TabsTrigger
             value="all"
@@ -52,12 +48,6 @@ export default async function InventoryPage() {
             className="rounded-xl px-4 py-2 text-[#94A3B8] data-active:bg-[#172033] data-active:text-[#F8FAFC]"
           >
             Near Threshold
-          </TabsTrigger>
-          <TabsTrigger
-            value="threshold-requests"
-            className="rounded-xl px-4 py-2 text-[#94A3B8] data-active:bg-[#172033] data-active:text-[#F8FAFC]"
-          >
-            Threshold Requests
           </TabsTrigger>
         </TabsList>
 
@@ -92,16 +82,6 @@ export default async function InventoryPage() {
           />
         </TabsContent>
 
-        <TabsContent value="threshold-requests" className="space-y-4">
-          <ThresholdChangeRequestList
-            requests={thresholdChangeRequests}
-            products={products}
-            variant="preview"
-            defaultOpen
-            title="Threshold Requests"
-            description="Review suggested stock level changes."
-          />
-        </TabsContent>
       </Tabs>
     </>
   )

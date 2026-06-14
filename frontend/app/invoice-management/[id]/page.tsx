@@ -19,8 +19,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { buildInvoiceReasoning } from "@/lib/ai-reasoning"
-import { getInvoices, getProducts, getSuppliers } from "@/lib/data"
-import type { Invoice, Product, StatusTone } from "@/lib/types"
+import { getInvoices, getSuppliers } from "@/lib/data"
+import type { Invoice, StatusTone } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
 
@@ -39,38 +39,6 @@ const approvalTone: Record<Invoice["approvalState"], StatusTone> = {
 
 type ValidationDisplayState = "match" | "mismatch" | "unchecked"
 
-const PLACEHOLDER_REFERENCE_VALUES = new Set([
-  "",
-  "supplier master",
-  "not provided",
-  "unknown",
-  "unknown supplier",
-  "system reference unavailable",
-])
-
-function normalizeComparableValue(value?: string | null) {
-  return (value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-}
-
-function isPlaceholderReferenceValue(value?: string | null) {
-  return PLACEHOLDER_REFERENCE_VALUES.has(normalizeComparableValue(value))
-}
-
-function validationDisplayState(
-  expected: string,
-  actual: string,
-  matched: boolean
-): ValidationDisplayState {
-  if (isPlaceholderReferenceValue(expected)) {
-    return "unchecked"
-  }
-
-  return matched ? "match" : "mismatch"
-}
-
 export async function generateStaticParams() {
   const invoices = await getInvoices()
   return invoices.map((invoice) => ({ id: invoice.id }))
@@ -82,9 +50,8 @@ export default async function InvoiceDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const [invoices, products, suppliers] = await Promise.all([
+  const [invoices, suppliers] = await Promise.all([
     getInvoices(),
-    getProducts(),
     getSuppliers(),
   ])
   const invoice = invoices.find((item) => item.id === id)
@@ -94,9 +61,6 @@ export default async function InvoiceDetailPage({
   }
 
   const supplier = suppliers.find((item) => item.id === invoice.supplierId)
-  const linkedProducts = invoice.linkedSkus
-    .map((sku) => products.find((product) => product.sku === sku))
-    .filter((product): product is Product => Boolean(product))
   const isCompleted = invoice.approvalState === "Completed"
   const shouldProcessInvoice =
     invoice.processingStatus === "idle" &&
@@ -106,12 +70,44 @@ export default async function InvoiceDetailPage({
     !invoice.aiLastAnalyzedAt &&
     invoice.riskReason.toLowerCase().startsWith("fallback validation only:")
   const invoiceReasoning = buildInvoiceReasoning(invoice, supplier)
-  const supplierExpectedValue =
-    invoice.expectedSupplierName ?? supplier?.name ?? "Unknown supplier"
-  const supplierActualValue = supplier?.name ?? "Unknown supplier"
-  const currencyExpectedValue = invoice.expectedCurrency ?? "MYR"
-  const currencyActualValue = invoice.currency ?? "MYR"
-
+  const validationChecks =
+    invoice.validationChecks && invoice.validationChecks.length > 0
+      ? invoice.validationChecks
+      : [
+          {
+            check: "Amount",
+            expected:
+              invoice.expectedAmountLabel ??
+              `${invoice.currency} ${invoice.negotiatedAmount.toLocaleString("en-US")}`,
+            actual: `${invoice.currency} ${invoice.amount.toLocaleString("en-US")}`,
+            state: invoice.flags.amountMismatch ? "mismatch" : "match",
+          },
+          {
+            check: "Quantity",
+            expected: invoice.expectedQuantity.toLocaleString("en-US"),
+            actual: invoice.invoiceQuantity.toLocaleString("en-US"),
+            state:
+              invoice.expectedQuantity === invoice.invoiceQuantity
+                ? "match"
+                : "mismatch",
+          },
+          {
+            check: "Supplier Info",
+            expected: invoice.expectedSupplierName ?? supplier?.name ?? "Unknown supplier",
+            actual: supplier?.name ?? "Unknown supplier",
+            state: invoice.flags.supplierInconsistency ? "mismatch" : "match",
+          },
+          {
+            check: "Currency",
+            expected: invoice.expectedCurrency ?? "MYR",
+            actual: invoice.currency,
+            state:
+              (invoice.expectedCurrency ?? "MYR").trim().toLowerCase() ===
+              invoice.currency.trim().toLowerCase()
+                ? "match"
+                : "mismatch",
+          },
+        ] satisfies NonNullable<Invoice["validationChecks"]>
   if (isProcessingInvoice) {
     return (
       <>
@@ -157,77 +153,38 @@ export default async function InvoiceDetailPage({
         processingStatus={invoice.processingStatus}
       />
 
-      <PageHeader
-        eyebrow="Invoice detail"
-        title={invoice.invoiceNumber}
-        description={`${supplier?.name ?? "Unknown supplier"} / ${invoice.workflowId}`}
-        actions={
-          <Button
-            asChild
-            className="h-10 rounded-[10px] bg-[#3B82F6] px-4 text-white hover:bg-[#2563EB]"
-          >
-            <Link
-              href={
-                isCompleted
-                  ? "/invoice-management/completed"
-                  : "/invoice-management"
-              }
+      <div className="space-y-7 xl:space-y-8">
+        <PageHeader
+          eyebrow="Invoice detail"
+          title={invoice.invoiceNumber}
+          description={`${supplier?.name ?? "Unknown supplier"} / ${invoice.workflowId}`}
+          actions={
+            <Button
+              asChild
+              className="h-10 rounded-[10px] bg-[#3B82F6] px-4 text-white hover:bg-[#2563EB]"
             >
-              {isCompleted ? "Back to history" : "Back to invoices"}
-            </Link>
-          </Button>
-        }
-      />
-      <section className="grid grid-cols-6 gap-3">
-        <SummaryTile label="Invoice ID" value={invoice.id} />
-        <SummaryTile label="Supplier" value={supplier?.name ?? "Unknown supplier"} />
-        <div className="rounded-[10px] border border-[#243047] bg-[#111827] p-4">
-          <p className="text-[13px] text-[#9CA3AF]">Linked SKU(s)</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {invoice.linkedSkus.map((sku) => (
-              <Link key={sku} href={`/inventory/${sku}`}>
-                <StatusBadge
-                  label={sku}
-                  tone="default"
-                  className="hover:border-[#3B82F6] hover:text-[#93C5FD]"
-                />
+              <Link
+                href={
+                  isCompleted
+                    ? "/invoice-management/completed"
+                    : "/invoice-management"
+                }
+              >
+                {isCompleted ? "Back to history" : "Back to invoices"}
               </Link>
-            ))}
-          </div>
-        </div>
-        <SummaryTile
-          label="Submitted Order"
-          value={
-            invoice.orderId
-              ? `${invoice.orderId}${invoice.orderStatus ? ` · ${invoice.orderStatus}` : ""}`
-              : invoice.workflowId ? "Pending negotiation" : "Not linked (Direct upload)"
+            </Button>
           }
         />
-        <SummaryTile label="Workflow ID" value={invoice.workflowId} />
-        <div className="rounded-[10px] border border-[#243047] bg-[#111827] p-4">
-          <p className="text-[13px] text-[#9CA3AF]">Approval State</p>
-          <div className="mt-2">
-            <StatusBadge
-              label={invoice.approvalState}
-              tone={approvalTone[invoice.approvalState]}
-            />
-          </div>
-        </div>
-        <SummaryTile
-          label="Workflow State"
-          value={invoice.workflowState ?? "Awaiting workflow sync"}
-        />
-      </section>
 
-      <section className="grid grid-cols-[1fr_380px] gap-6">
-        <main className="space-y-6">
-          <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-            <CardHeader className="border-b border-[#243047] p-4">
+        <section className="grid gap-7 xl:gap-8 lg:grid-cols-[1fr_400px]">
+          <main className="space-y-7">
+            <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
+            <CardHeader className="border-b border-[#243047] p-5">
               <CardTitle className="text-[18px] font-semibold text-[#E5E7EB]">
                 Invoice Preview
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-[280px_1fr] gap-5 p-5">
+            <CardContent className="grid grid-cols-[300px_1fr] gap-7 p-6">
               <InvoiceFilePreview
                 fileUrl={invoice.fileUrl}
                 invoiceNumber={invoice.invoiceNumber}
@@ -238,12 +195,12 @@ export default async function InvoiceDetailPage({
                 paymentTerms={invoice.paymentTerms}
                 sourceType={invoice.sourceType}
               />
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <InfoRow label="File Name" value={invoice.fileName} />
                 <InfoRow label="Source Type" value={invoice.sourceType} />
                 <InfoRow label="File Size" value={invoice.fileSize} />
                 <InfoRow label="Validation Status" value={invoice.validationStatus} />
-                <div className="rounded-[12px] border border-[#243047] bg-[#172033] p-4">
+                <div className="rounded-[12px] border border-[#243047] bg-[#172033] p-5">
                   <p className="text-[13px] text-[#9CA3AF]">Review context</p>
                   <p className="mt-2 text-[15px] leading-6 text-[#E5E7EB]">
                     Click the small preview card to pop up the original
@@ -256,29 +213,7 @@ export default async function InvoiceDetailPage({
           </Card>
 
           <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-            <CardHeader className="border-b border-[#243047] p-4">
-              <CardTitle className="text-[18px] font-semibold text-[#E5E7EB]">
-                Parsed Invoice Fields
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-3 gap-4 p-5">
-              <InfoRow label="Invoice Number" value={invoice.invoiceNumber} />
-              <InfoRow label="Supplier Name" value={supplier?.name ?? "Unknown supplier"} />
-              <InfoRow
-                label="Linked Products"
-                value={linkedProducts.map((product) => product?.name).join(", ")}
-              />
-              <InfoRow label="Quantity" value={invoice.invoiceQuantity.toLocaleString("en-US")} />
-              <InfoRow label="Unit Price" value={`${invoice.currency} ${invoice.unitPrice.toFixed(2)}`} />
-              <InfoRow label="Subtotal" value={`${invoice.currency} ${invoice.subtotal.toLocaleString("en-US")}`} />
-              <InfoRow label="Total" value={`${invoice.currency} ${invoice.amount.toLocaleString("en-US")}`} />
-              <InfoRow label="Currency" value={invoice.currency} />
-              <InfoRow label="Payment Terms" value={invoice.paymentTerms} />
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-            <CardHeader className="border-b border-[#243047] p-4">
+            <CardHeader className="border-b border-[#243047] p-5">
               <CardTitle className="text-[18px] font-semibold text-[#E5E7EB]">
                 Check Result
               </CardTitle>
@@ -287,66 +222,33 @@ export default async function InvoiceDetailPage({
               <Table>
                 <TableHeader>
                   <TableRow className="border-[#243047] hover:bg-transparent">
-                    <TableHead className="px-4 text-[13px] text-[#9CA3AF]">
+                    <TableHead className="px-5 py-3 text-[13px] text-[#9CA3AF]">
                       Check
                     </TableHead>
-                    <TableHead className="text-[13px] text-[#9CA3AF]">
+                    <TableHead className="py-3 text-[13px] text-[#9CA3AF]">
                       Expected
                     </TableHead>
-                    <TableHead className="text-[13px] text-[#9CA3AF]">
+                    <TableHead className="py-3 text-[13px] text-[#9CA3AF]">
                       Invoice
                     </TableHead>
-                    <TableHead className="text-[13px] text-[#9CA3AF]">
+                    <TableHead className="py-3 text-[13px] text-[#9CA3AF]">
                       Result
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <ValidationRow
-                    check="Amount"
-                    expected={
-                      invoice.expectedAmountLabel ??
-                      `${invoice.currency} ${invoice.negotiatedAmount.toLocaleString("en-US")}`
-                    }
-                    actual={`${invoice.currency} ${invoice.amount.toLocaleString("en-US")}`}
-                    state={
-                      !invoice.flags.amountMismatch ? "match" : "mismatch"
-                    }
-                  />
-                  <ValidationRow
-                    check="Quantity"
-                    expected={invoice.expectedQuantity.toLocaleString("en-US")}
-                    actual={invoice.invoiceQuantity.toLocaleString("en-US")}
-                    state={
-                      invoice.expectedQuantity === invoice.invoiceQuantity
-                        ? "match"
-                        : "mismatch"
-                    }
-                  />
-                  <ValidationRow
-                    check="Supplier Info"
-                    expected={supplierExpectedValue}
-                    actual={supplierActualValue}
-                    state={validationDisplayState(
-                      supplierExpectedValue,
-                      supplierActualValue,
-                      !invoice.flags.supplierInconsistency
-                    )}
-                  />
-                  <ValidationRow
-                    check="Currency"
-                    expected={currencyExpectedValue}
-                    actual={currencyActualValue}
-                    state={validationDisplayState(
-                      currencyExpectedValue,
-                      currencyActualValue,
-                      normalizeComparableValue(currencyExpectedValue) ===
-                        normalizeComparableValue(currencyActualValue)
-                    )}
-                  />
+                  {validationChecks.map((check) => (
+                    <ValidationRow
+                      key={`${check.check}-${check.expected}-${check.actual}`}
+                      check={check.check}
+                      expected={check.expected}
+                      actual={check.actual}
+                      state={check.state}
+                    />
+                  ))}
                 </TableBody>
               </Table>
-              <div className="border-t border-[#243047] p-4">
+              <div className="border-t border-[#243047] p-5">
                 <p className="text-[13px] font-medium text-[#9CA3AF]">
                   Issues to Review
                 </p>
@@ -368,17 +270,17 @@ export default async function InvoiceDetailPage({
           </Card>
         </main>
 
-        <aside className="space-y-6">
+        <aside className="space-y-7">
           <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-            <CardHeader className="border-b border-[#243047] p-4">
+            <CardHeader className="border-b border-[#243047] p-5">
               <CardTitle className="text-[18px] font-semibold text-[#E5E7EB]">
                 Risk Analysis Panel
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4 p-5">
+            <CardContent className="space-y-5 p-6">
               <StatusBadge label={invoice.riskLevel} tone={riskTone[invoice.riskLevel]} />
               {!invoice.aiLastAnalyzedAt ? (
-                <div className="rounded-[12px] border border-[#243047] bg-[#172033] p-4">
+                <div className="rounded-[12px] border border-[#243047] bg-[#172033] p-5">
                   <p className="text-[13px] font-medium text-[#9CA3AF]">
                     AI status
                   </p>
@@ -395,7 +297,7 @@ export default async function InvoiceDetailPage({
                   </div>
                 </div>
               ) : null}
-              <div className="rounded-[12px] border border-[#243047] bg-[#172033] p-4">
+              <div className="rounded-[12px] border border-[#243047] bg-[#172033] p-5">
                 <p className="text-[13px] font-medium text-[#9CA3AF]">
                   Review summary
                 </p>
@@ -452,11 +354,11 @@ export default async function InvoiceDetailPage({
               />
             </CardContent>
           </Card>
-        </aside>
-      </section>
+          </aside>
+        </section>
 
-      <section className="rounded-[14px] border border-[#3B82F6]/40 bg-[#172033] p-5 shadow-[0_16px_40px_rgba(59,130,246,0.08)]">
-        <div className="grid grid-cols-[1fr_auto] items-center gap-5">
+        <section className="rounded-[14px] border border-[#3B82F6]/40 bg-[#172033] p-6 shadow-[0_16px_40px_rgba(59,130,246,0.08)]">
+          <div className="grid grid-cols-[1fr_auto] items-center gap-6">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-[18px] font-semibold text-[#E5E7EB]">
@@ -479,20 +381,10 @@ export default async function InvoiceDetailPage({
             isCompleted={isCompleted}
             approvalState={invoice.approvalState}
           />
-        </div>
-      </section>
+          </div>
+        </section>
+      </div>
     </>
-  )
-}
-
-function SummaryTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[10px] border border-[#243047] bg-[#111827] p-4">
-      <p className="text-[13px] text-[#9CA3AF]">{label}</p>
-      <p className="mt-2 truncate text-[15px] font-semibold text-[#E5E7EB]">
-        {value}
-      </p>
-    </div>
   )
 }
 
@@ -523,14 +415,23 @@ function ValidationRow({
         ? { label: "Mismatch", tone: "danger" as const }
         : { label: "Not checked", tone: "default" as const }
 
+  const rowClassName =
+    state === "mismatch"
+      ? "border-[#7F1D1D]/60 bg-[#7F1D1D]/18 shadow-[inset_4px_0_0_rgba(239,68,68,0.8)] hover:bg-[#7F1D1D]/24"
+      : "border-[#243047] hover:bg-[#172033]/70"
+
   return (
-    <TableRow className="border-[#243047] hover:bg-[#172033]/70">
-      <TableCell className="px-4 text-[15px] font-medium text-[#E5E7EB]">
+    <TableRow className={rowClassName}>
+      <TableCell className="px-5 py-4 text-[15px] font-medium text-[#E5E7EB]">
         {check}
       </TableCell>
-      <TableCell className="text-[15px] text-[#9CA3AF]">{expected}</TableCell>
-      <TableCell className="text-[15px] text-[#9CA3AF]">{actual}</TableCell>
-      <TableCell>
+      <TableCell className="py-4 text-[15px] text-[#9CA3AF]">
+        {expected}
+      </TableCell>
+      <TableCell className="py-4 text-[15px] text-[#9CA3AF]">
+        {actual}
+      </TableCell>
+      <TableCell className="py-4">
         <StatusBadge label={badge.label} tone={badge.tone} />
       </TableCell>
     </TableRow>

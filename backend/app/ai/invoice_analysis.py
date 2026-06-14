@@ -58,6 +58,13 @@ class InvoiceAnalysisIssue(BaseModel):
     severity: Literal["low", "medium", "high"]
 
 
+class InvoiceAnalysisValidationCheck(BaseModel):
+    checkName: str = Field(..., min_length=1)
+    expectedValue: str | None = None
+    actualValue: str | None = None
+    result: Literal["passed", "warning", "failed"]
+
+
 class InvoiceAnalysisParsedLineItem(BaseModel):
     description: str | None = None
     unitPrice: float | None = Field(default=None, ge=0)
@@ -156,6 +163,7 @@ class InvoiceAnalysisResult(BaseModel):
     )
     riskLevel: Literal["low", "medium", "high"]
     issues: list[InvoiceAnalysisIssue] = Field(default_factory=list)
+    validationChecks: list[InvoiceAnalysisValidationCheck] = Field(default_factory=list)
     summary: str = Field(..., min_length=1)
     confidence: float = Field(..., ge=0, le=1)
 
@@ -313,6 +321,20 @@ def _build_user_prompt(
         '"severity": "high"\n'
         "}\n"
         "],\n"
+        '"validationChecks": [\n'
+        "{\n"
+        '"checkName": "Amount",\n'
+        '"expectedValue": "MYR 750.00",\n'
+        '"actualValue": "MYR 1190.40",\n'
+        '"result": "failed"\n'
+        "},\n"
+        "{\n"
+        '"checkName": "Quantity",\n'
+        '"expectedValue": "60",\n'
+        '"actualValue": "60",\n'
+        '"result": "passed"\n'
+        "}\n"
+        "],\n"
         '"summary": "short explanation",\n'
         '"confidence": 0.92\n'
         "}\n\n"
@@ -333,6 +355,12 @@ def _build_user_prompt(
         '* If only a symbol is detected: "$" may be USD unless context suggests otherwise; "RM" means MYR; "£" means GBP; "€" means EUR; "¥" is ambiguous, so return null unless context clearly indicates JPY or CNY.\n'
         "* If a field is not found, return null for that field.\n"
         "* Each item in 'issues' MUST be an object with type, description, and severity.\n"
+        "* You MUST draft validationChecks as the exact check table the UI should show.\n"
+        "* Include passed rows for important matched fields and failed/warning rows for mismatches.\n"
+        "* Choose checkName labels that a buyer can scan, such as Amount, Quantity, Supplier Info, Unit Price, Currency, Payment Terms, Bank Details, or Invoice Number.\n"
+        "* For validationChecks.expectedValue, write the system/reference value. For actualValue, write the invoice/OCR value.\n"
+        "* If supplier name, unit price, amount, quantity, or currency is mismatched, create a separate validationChecks row for that mismatch. Do not hide it inside a generic Suspicious Value row.\n"
+        "* validationChecks.result must be one of: passed, warning, failed.\n"
         "* The 'type' must be one of: amount_mismatch, missing_field, bank_mismatch, suspicious_value, other.\n"
         "* The 'severity' must be one of: low, medium, high.\n"
         "* Do NOT return issues as plain strings.\n"

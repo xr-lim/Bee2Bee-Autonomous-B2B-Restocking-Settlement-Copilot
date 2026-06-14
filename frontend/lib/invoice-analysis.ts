@@ -11,6 +11,13 @@ export type InvoiceAnalysisIssue = {
   severity: "low" | "medium" | "high"
 }
 
+export type InvoiceAnalysisValidationCheck = {
+  checkName: string
+  expectedValue?: string | null
+  actualValue?: string | null
+  result: "passed" | "warning" | "failed"
+}
+
 export type InvoiceAnalysisParsedLineItem = {
   description: string | null
   unitPrice: number | null
@@ -35,6 +42,7 @@ export type InvoiceAnalysisResult = {
   parsedInvoiceFields: InvoiceAnalysisParsedFields
   riskLevel: "low" | "medium" | "high"
   issues: InvoiceAnalysisIssue[]
+  validationChecks?: InvoiceAnalysisValidationCheck[]
   summary: string
   confidence: number
   parserReliability?: "low" | "medium" | "high"

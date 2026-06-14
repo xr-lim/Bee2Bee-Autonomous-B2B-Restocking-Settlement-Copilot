@@ -7,7 +7,6 @@ import { ProductStockDemandChart } from "@/components/shared/inventory-charts"
 import { ManualRestockButton } from "@/components/shared/manual-restock-button"
 import { ProductDetailsEditor } from "@/components/shared/product-details-editor"
 import { RestockForm } from "@/components/shared/restock-form"
-import { ThresholdChangeReviewPanel } from "@/components/shared/threshold-change-review-panel"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -20,7 +19,6 @@ import {
   getRestockRequests,
   getSuppliers,
   getThresholdAnalysisBySku,
-  getThresholdChangeRequests,
 } from "@/lib/data"
 import type { StatusTone, StockStatus } from "@/lib/types"
 
@@ -59,7 +57,6 @@ export default async function InventoryDetailPage({
     thresholdAnalysisBySku,
     restockRecommendations,
     restockRequests,
-    thresholdChangeRequests,
     productStockDemandTrendBySku,
   ] = await Promise.all([
     getProducts(),
@@ -69,7 +66,6 @@ export default async function InventoryDetailPage({
     getThresholdAnalysisBySku(),
     getRestockRecommendations(),
     getRestockRequests(),
-    getThresholdChangeRequests(),
     getProductStockDemandTrendBySku(),
   ])
 
@@ -119,10 +115,6 @@ export default async function InventoryDetailPage({
     !activeRestockRequest &&
     !hasActiveWorkflow &&
     !restockRecommendation
-  const pendingThresholdRequest = thresholdChangeRequests.find(
-    (item) => item.productSku === product.sku && item.status === "pending"
-  )
-
   return (
     <>
       <PageHeader
@@ -151,7 +143,7 @@ export default async function InventoryDetailPage({
       <Tabs defaultValue="overview" className="gap-4">
         <TabsList
           variant="line"
-          className="w-full justify-start gap-2 overflow-x-auto rounded-2xl border border-[#243047] bg-[#111827] p-2"
+          className="h-auto w-full justify-start gap-2 overflow-hidden rounded-2xl border border-[#243047] bg-[#111827] p-2"
         >
           <TabsTrigger value="overview" className="rounded-xl px-4 py-2 text-[#94A3B8] data-active:bg-[#172033] data-active:text-[#F8FAFC]">
             Overview
@@ -254,13 +246,6 @@ export default async function InventoryDetailPage({
               </CollapsibleSection>
             </CardContent>
           </Card>
-
-          {pendingThresholdRequest ? (
-            <ThresholdChangeReviewPanel
-              request={pendingThresholdRequest}
-              product={product}
-            />
-          ) : null}
 
           {restockRecommendation ? (
             <RestockForm

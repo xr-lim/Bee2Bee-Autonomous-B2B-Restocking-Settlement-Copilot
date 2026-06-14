@@ -1,9 +1,11 @@
 import { Bot, ShieldCheck, SlidersHorizontal } from "lucide-react"
 
 import { PageHeader } from "@/components/layout/page-header"
+import { AiAnalysisPreferences } from "@/components/shared/ai-analysis-preferences"
 import { DashboardThresholdAnalysisButton } from "@/components/shared/dashboard-threshold-analysis-button"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { getAiAnalysisPreferencesAction } from "@/lib/actions"
 
 const automationPolicies = [
   {
@@ -23,7 +25,9 @@ const automationPolicies = [
   },
 ]
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const aiAnalysisPreferences = await getAiAnalysisPreferencesAction()
+
   return (
     <>
       <PageHeader
@@ -72,7 +76,8 @@ export default function SettingsPage() {
                 Run stock threshold review or restock demand analysis when you want a fresh AI pass.
               </p>
             </CardHeader>
-            <CardContent className="p-4">
+            <CardContent className="space-y-5 p-4">
+              <AiAnalysisPreferences initialPreferences={aiAnalysisPreferences} />
               <DashboardThresholdAnalysisButton />
             </CardContent>
           </Card>

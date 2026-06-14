@@ -210,8 +210,8 @@ export function SuppliersManager({
 
   return (
     <Card className="rounded-[14px] border border-[#243047] bg-[#111827] py-0 shadow-none ring-0">
-      <CardHeader className="flex flex-col gap-3 border-b border-[#243047] p-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-start gap-3">
+      <CardHeader className="flex flex-col gap-4 border-b border-[#243047] p-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-4">
           <div className="flex size-10 items-center justify-center rounded-[10px] bg-[#3B82F6]/15">
             <Building2 className="size-5 text-[#3B82F6]" aria-hidden="true" />
           </div>
@@ -219,12 +219,12 @@ export function SuppliersManager({
             <CardTitle className="text-[18px] font-semibold text-[#E5E7EB]">
               Supplier Registry
             </CardTitle>
-            <p className="mt-1 text-[13px] leading-5 text-[#9CA3AF]">
+            <p className="mt-2 text-[13px] leading-5 text-[#9CA3AF]">
               {suppliers.length} suppliers · open a row to manage product coverage.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <div className="relative">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#6B7280]"
@@ -284,7 +284,7 @@ export function SuppliersManager({
             {error}
           </div>
         ) : null}
-        <div className="grid grid-cols-[1.6fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_auto] items-center gap-3 border-b border-[#243047] px-5 py-2.5 text-[12px] font-medium uppercase tracking-wider text-[#6B7280]">
+        <div className="grid grid-cols-[1.6fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_auto] items-center gap-4 border-b border-[#243047] px-6 py-3.5 text-[12px] font-medium uppercase tracking-wider text-[#6B7280]">
           <span>Supplier</span>
           <span>Region</span>
           <span>Language</span>
@@ -310,7 +310,7 @@ export function SuppliersManager({
                   }
                   aria-expanded={isOpen}
                   className={cn(
-                    "grid w-full grid-cols-[1.6fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_auto] items-center gap-3 px-5 py-4 text-left transition-colors",
+                    "grid w-full grid-cols-[1.6fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr_auto] items-center gap-4 px-6 py-5 text-left transition-colors",
                     isOpen
                       ? "bg-[#172033]"
                       : "hover:bg-[#172033]/60"
@@ -368,8 +368,8 @@ export function SuppliersManager({
                       transition={{ duration: 0.18, ease: "easeInOut" }}
                       style={{ overflow: "hidden" }}
                     >
-                      <div className="space-y-4 border-t border-[#243047] bg-[#0B1220] px-5 py-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="space-y-5 border-t border-[#243047] bg-[#0B1220] px-6 py-5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
                           <p className="text-[13px] font-semibold text-[#E5E7EB]">
                             SKU assignments for {supplier.name}
                           </p>

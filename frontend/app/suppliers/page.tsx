@@ -11,7 +11,7 @@ export default async function SuppliersPage() {
   ])
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Supplier management"
         title="Suppliers"
@@ -25,6 +25,6 @@ export default async function SuppliersPage() {
         initialSuppliers={suppliers}
         products={products}
       />
-    </>
+    </div>
   )
 }

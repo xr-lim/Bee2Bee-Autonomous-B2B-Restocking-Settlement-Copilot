@@ -19,7 +19,10 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { buildThresholdReasoning } from "@/lib/ai-reasoning"
-import { decideThresholdRequestAction } from "@/lib/actions"
+import {
+  approvePendingThresholdRequestsAction,
+  decideThresholdRequestAction,
+} from "@/lib/actions"
 import type { Product, StatusTone, ThresholdChangeRequest } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -73,6 +76,7 @@ export function ThresholdChangeRequestList({
   const [open, setOpen] = useState(defaultOpen || !collapsible)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
 
   const pendingRequests = requests.filter(
     (request) => (statusMap[request.id] ?? request.status) === "pending"
@@ -87,6 +91,7 @@ export function ThresholdChangeRequestList({
     const request = requests.find((item) => item.id === id)
     if (!request || decision === "pending") return
     setError(null)
+    setMessage(null)
     startTransition(async () => {
       const result = await decideThresholdRequestAction({
         requestId: id,
@@ -103,26 +108,56 @@ export function ThresholdChangeRequestList({
     })
   }
 
+  function handleBulkApprove() {
+    const requestIds = pendingRequests.map((request) => request.id)
+    if (requestIds.length === 0) return
+    setError(null)
+    setMessage(null)
+    startTransition(async () => {
+      const result = await approvePendingThresholdRequestsAction({ requestIds })
+      if (!result.ok) {
+        setError(result.message ?? "Could not apply threshold updates.")
+        return
+      }
+      setStatusMap((current) => {
+        const next = { ...current }
+        requestIds.forEach((id) => {
+          next[id] = "approved"
+        })
+        return next
+      })
+      setMessage(result.message ?? "Threshold updates applied.")
+      router.refresh()
+    })
+  }
+
   const expanded = collapsible ? open : true
 
   return (
     <Card className="rounded-[14px] border border-[#8B5CF6]/35 bg-[#111827] py-0 shadow-none ring-0">
       <CardHeader className="p-0">
-        <button
-          type="button"
+        <div
+          role={collapsible ? "button" : undefined}
+          tabIndex={collapsible ? 0 : undefined}
           onClick={() => {
             if (collapsible) setOpen((value) => !value)
           }}
+          onKeyDown={(event) => {
+            if (!collapsible) return
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault()
+              setOpen((value) => !value)
+            }
+          }}
           aria-expanded={expanded}
-          disabled={!collapsible}
           className={cn(
-            "flex w-full items-start justify-between gap-3 p-4 text-left",
+            "flex w-full items-start justify-between gap-4 p-5 text-left",
             collapsible &&
               "transition-colors hover:bg-[#172033]/50 cursor-pointer",
             !collapsible && "cursor-default"
           )}
         >
-          <div className="flex min-w-0 items-start gap-3">
+          <div className="flex min-w-0 items-start gap-4">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#8B5CF6]/15">
               <Bot className="size-4 text-[#8B5CF6]" aria-hidden="true" />
             </div>
@@ -136,7 +171,7 @@ export function ThresholdChangeRequestList({
                   tone={pendingRequests.length > 0 ? "ai" : "default"}
                 />
               </div>
-              <p className="mt-1.5 text-[15px] leading-6 text-[#9CA3AF]">
+              <p className="mt-2 text-[15px] leading-6 text-[#9CA3AF]">
                 {description}
               </p>
             </div>
@@ -155,8 +190,21 @@ export function ThresholdChangeRequestList({
                 )}
               />
             </div>
+          ) : !isPreview && pendingRequests.length > 0 ? (
+            <Button
+              type="button"
+              disabled={isPending}
+              onClick={(event) => {
+                event.stopPropagation()
+                handleBulkApprove()
+              }}
+              className="h-9 shrink-0 rounded-[10px] bg-[#3B82F6] px-3 text-white hover:bg-[#2563EB]"
+            >
+              <Check className="size-4" aria-hidden="true" />
+              {isPending ? "Applying..." : "Apply all pending"}
+            </Button>
           ) : null}
-        </button>
+        </div>
       </CardHeader>
 
       {expanded ? (
@@ -164,6 +212,11 @@ export function ThresholdChangeRequestList({
           {error ? (
             <div className="border-b border-[#EF4444]/30 bg-[#EF4444]/10 px-4 py-2.5 text-[13px] text-[#FCA5A5]">
               {error}
+            </div>
+          ) : null}
+          {message ? (
+            <div className="border-b border-[#10B981]/30 bg-[#10B981]/10 px-4 py-2.5 text-[13px] text-[#86EFAC]">
+              {message}
             </div>
           ) : null}
           {visibleRequests.length === 0 ? (
@@ -191,7 +244,7 @@ export function ThresholdChangeRequestList({
           {hiddenCount > 0 ? (
             <div className="border-t border-[#243047] px-4 py-2.5 text-[13px] text-[#6B7280]">
               +{hiddenCount} more pending request
-              {hiddenCount > 1 ? "s" : ""}. Open inventory to review all.
+              {hiddenCount > 1 ? "s" : ""}. Open thresholds to review all.
             </div>
           ) : null}
         </CardContent>
@@ -336,8 +389,8 @@ function ThresholdRow({
   const reasoning = buildThresholdReasoning(request, product)
 
   return (
-    <li className="flex flex-col gap-3 px-4 py-4">
-      <div className="grid grid-cols-[1.3fr_1.1fr_auto] items-center gap-4">
+    <li className="flex flex-col gap-4 px-5 py-5">
+      <div className="grid grid-cols-[1.3fr_1.1fr_auto] items-center gap-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Link
@@ -351,10 +404,10 @@ function ThresholdRow({
               tone={triggerTone[request.trigger]}
             />
           </div>
-          <p className="mt-1 font-mono text-[13px] text-[#6B7280]">
+          <p className="mt-1.5 font-mono text-[13px] text-[#6B7280]">
             {request.productSku}
           </p>
-          <p className="mt-1.5 line-clamp-2 text-[14px] leading-6 text-[#9CA3AF]">
+          <p className="mt-2 line-clamp-2 text-[14px] leading-6 text-[#9CA3AF]">
             {request.reason}
           </p>
         </div>

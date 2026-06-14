@@ -1,9 +1,27 @@
-import { Bell, Bot, Command, ScanSearch } from "lucide-react"
+"use client"
+
+import { useRouter } from "next/navigation"
+import { Bell, Bot, Command, LogOut, ScanSearch, UserRound } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export function TopHeader() {
+  const router = useRouter()
+
+  function signOut() {
+    window.localStorage.removeItem("bee2bee_mock_session")
+    router.push("/login")
+  }
+
   return (
     <header className="sticky top-0 z-20 flex h-20 shrink-0 items-center justify-between border-b border-[#22304A] bg-[#0B1020]/85 px-4 backdrop-blur sm:px-6">
       <div className="hidden items-center gap-3 lg:flex">
@@ -35,19 +53,45 @@ export function TopHeader() {
           <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-[#EF4444]" />
         </Button>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-lg"
-          className="rounded-2xl border border-[#334155] bg-[#101827]/60 text-[#E5E7EB] hover:bg-[#172033]"
-          aria-label="Open user menu"
-        >
-          <Avatar className="size-8 border border-[#243047]">
-            <AvatarFallback className="bg-[#172033] text-[12px] font-semibold text-[#E5E7EB]">
-              MA
-            </AvatarFallback>
-          </Avatar>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-lg"
+              className="rounded-2xl border border-[#334155] bg-[#101827]/60 text-[#E5E7EB] hover:bg-[#172033]"
+              aria-label="Open user menu"
+            >
+              <Avatar className="size-8 border border-[#243047]">
+                <AvatarFallback className="bg-[#172033] text-[12px] font-semibold text-[#E5E7EB]">
+                  MA
+                </AvatarFallback>
+              </Avatar>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="w-64 border border-[#243047] bg-[#0B1220] p-2 text-[#E5E7EB]"
+          >
+            <DropdownMenuLabel className="px-3 py-2 text-[#94A3B8]">
+              <span className="flex items-center gap-2">
+                <UserRound className="size-4 text-[#7DD3FC]" aria-hidden="true" />
+                Mock operator
+              </span>
+              <span className="mt-1 block truncate text-[12px] font-normal text-[#64748B]">
+                merchant.admin@bee2bee.local
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-[#243047]" />
+            <DropdownMenuItem
+              onSelect={signOut}
+              className="cursor-pointer px-3 py-2 text-[#FCA5A5] focus:bg-[#7F1D1D]/20 focus:text-[#FECACA]"
+            >
+              <LogOut className="size-4" aria-hidden="true" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   )

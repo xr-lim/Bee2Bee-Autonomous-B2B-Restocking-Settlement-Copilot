@@ -265,6 +265,12 @@ export type Invoice = {
     missingFields: boolean
     supplierInconsistency: boolean
   }
+  validationChecks?: Array<{
+    check: string
+    expected: string
+    actual: string
+    state: "match" | "mismatch" | "unchecked"
+  }>
   mismatches: string[]
   history: Array<{
     timestamp: string
