@@ -7,6 +7,7 @@ import { PageTransition } from "@/components/layout/page-transition"
 import { SidebarNav } from "@/components/layout/sidebar-nav"
 import { TopHeader } from "@/components/layout/top-header"
 import { AutoAiAnalysisRunner } from "@/components/shared/ai-analysis-preferences"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 
 type AppShellProps = {
   children: ReactNode
@@ -17,7 +18,16 @@ export function AppShell({ children }: AppShellProps) {
 
   // Detach system shell for standalone experiences.
   if (pathname?.startsWith("/chat") || pathname === "/login") {
-    return <div className="min-h-screen bg-[#0B1020] text-[#E5E7EB]">{children}</div>
+    return (
+      <div className="min-h-screen bg-[#0B1020] text-[#E5E7EB]">
+        {pathname?.startsWith("/chat") ? (
+          <div className="fixed right-4 top-4 z-50">
+            <ThemeToggle />
+          </div>
+        ) : null}
+        {children}
+      </div>
+    )
   }
 
   return (

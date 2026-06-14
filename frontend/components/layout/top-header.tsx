@@ -5,6 +5,7 @@ import { Bell, Bot, Command, LogOut, ScanSearch, UserRound } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +42,8 @@ export function TopHeader() {
           <Bot className="size-4" aria-hidden="true" />
           AI Active
         </div>
+
+        <ThemeToggle />
 
         <Button
           type="button"

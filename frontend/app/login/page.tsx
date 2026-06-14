@@ -6,6 +6,7 @@ import { BadgeCheck, KeyRound, Lock, Mail, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 
 const MOCK_LOGIN_CREDENTIALS = {
   email: "merchant.admin@bee2bee.local",
@@ -39,6 +40,9 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen bg-[#0B1020] px-4 py-10 text-[#E5E7EB] sm:px-6">
+      <div className="fixed right-4 top-4 z-20">
+        <ThemeToggle />
+      </div>
       <div className="mx-auto grid min-h-[calc(100vh-5rem)] w-full max-w-6xl items-center gap-8 lg:grid-cols-[1fr_460px]">
         <section className="space-y-6">
           <div className="inline-flex h-11 items-center gap-2 rounded-2xl border border-[#FACC15]/25 bg-[#FACC15]/10 px-4 text-[13px] font-semibold text-[#FCD34D]">

@@ -66,46 +66,46 @@
   --destructive: #EF4444;
   --border: #243047;
   --input: #243047;
-  --ring: #3B82F6;
-  --chart-1: #3B82F6;
+    --background: #faf7f0;
+    --foreground: #0f1f3d;
   --chart-2: #10B981;
-  --chart-3: #F59E0B;
+    --card-foreground: #0f1f3d;
   --chart-4: #EF4444;
-  --chart-5: #8B5CF6;
-  --radius: 0.625rem;
-  --sidebar: #121A2B;
-  --sidebar-foreground: #E5E7EB;
-  --sidebar-primary: #3B82F6;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #172033;
-  --sidebar-accent-foreground: #E5E7EB;
-  --sidebar-border: #243047;
+    --popover-foreground: #0f1f3d;
+    --primary: #f59e0b;
+    --primary-foreground: #0f1f3d;
+    --secondary: #fef3c7;
+    --secondary-foreground: #0f1f3d;
+    --muted: #f5efe3;
+    --muted-foreground: #667085;
+    --accent: #eaf2ff;
+    --accent-foreground: #0f1f3d;
   --sidebar-ring: #3B82F6;
-  --surface-1: #0f1728;
-  --surface-2: #131d31;
-  --surface-3: #18243b;
-  --bee-amber: #facc15;
+    --border: #e7e0d0;
+    --input: #e7e0d0;
+    --ring: #f59e0b;
+    --chart-1: #f59e0b;
   --bee-amber-soft: rgba(250, 204, 21, 0.16);
-  --tech-cyan: #38bdf8;
+    --chart-3: #2563eb;
   --success-soft: rgba(16, 185, 129, 0.14);
   --warning-soft: rgba(245, 158, 11, 0.14);
   --danger-soft: rgba(239, 68, 68, 0.14);
-}
-
-.dark {
-  --background: #0B1020;
-  --foreground: #E5E7EB;
-  --card: #111827;
-  --card-foreground: #E5E7EB;
-  --popover: #111827;
+    --sidebar: #f8f4ea;
+    --sidebar-foreground: #0f1f3d;
+    --sidebar-primary: #f59e0b;
+    --sidebar-primary-foreground: #0f1f3d;
+    --sidebar-accent: #ffffff;
+    --sidebar-accent-foreground: #0f1f3d;
+    --sidebar-border: #e7e0d0;
+    --sidebar-ring: #f59e0b;
   --popover-foreground: #E5E7EB;
-  --primary: #3B82F6;
-  --primary-foreground: #FFFFFF;
-  --secondary: #121A2B;
-  --secondary-foreground: #E5E7EB;
-  --muted: #172033;
+    --surface-2: #fbf8f1;
+    --surface-3: #f5efe3;
+    --bee-amber: #f59e0b;
+    --bee-amber-soft: rgba(245, 158, 11, 0.14);
+    --tech-cyan: #2563eb;
   --muted-foreground: #9CA3AF;
-  --accent: #172033;
+    --warning-soft: rgba(245, 158, 11, 0.14);
   --accent-foreground: #E5E7EB;
   --destructive: #EF4444;
   --border: #243047;
@@ -135,17 +135,64 @@
   --danger-soft: rgba(239, 68, 68, 0.14);
 }
 
+.light {
+  --background: #fffaf0;
+  --foreground: #071b4d;
+  --card: #ffffff;
+  --card-foreground: #071b4d;
+  --popover: #ffffff;
+  --popover-foreground: #071b4d;
+  --primary: #f5a400;
+  --primary-foreground: #071b4d;
+  --secondary: #fff4c2;
+  --secondary-foreground: #071b4d;
+  --muted: #fff7dc;
+  --muted-foreground: #51617d;
+  --accent: #fff0ad;
+  --accent-foreground: #071b4d;
+  --destructive: #dc2626;
+  --border: #f0d58a;
+  --input: #f0d58a;
+  --ring: #f5a400;
+  --chart-1: #f5a400;
+  --chart-2: #16a34a;
+  --chart-3: #0284c7;
+  --chart-4: #dc2626;
+  --chart-5: #7c3aed;
+  --sidebar: #fff7dc;
+  --sidebar-foreground: #071b4d;
+  --sidebar-primary: #f5a400;
+  --sidebar-primary-foreground: #071b4d;
+  --sidebar-accent: #fff0ad;
+  --sidebar-accent-foreground: #071b4d;
+  --sidebar-border: #f0d58a;
+  --sidebar-ring: #f5a400;
+  --surface-1: #ffffff;
+  --surface-2: #fff8df;
+  --surface-3: #fff0ad;
+  --bee-amber: #f5a400;
+  --bee-amber-soft: rgba(245, 164, 0, 0.18);
+  --tech-cyan: #0284c7;
+  --success-soft: rgba(22, 163, 74, 0.12);
+  --warning-soft: rgba(245, 164, 0, 0.18);
+  --danger-soft: rgba(220, 38, 38, 0.12);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
-    background-image:
-      radial-gradient(circle at top left, rgba(250, 204, 21, 0.08), transparent 28%),
-      radial-gradient(circle at top right, rgba(56, 189, 248, 0.1), transparent 24%),
-      linear-gradient(180deg, #09111e 0%, #0b1020 38%, #0a0f1d 100%);
     min-height: 100vh;
+  }
+  .light body {
+    background-color: #faf7f0;
+    background-image:
+      radial-gradient(circle at top left, rgba(245, 158, 11, 0.08), transparent 26%),
+      radial-gradient(circle at top right, rgba(37, 99, 235, 0.06), transparent 24%),
+      linear-gradient(180deg, #fbf8f1 0%, #faf7f0 52%, #fefdf9 100%);
+    color: #0f1f3d;
   }
   html {
     @apply font-sans;
@@ -177,5 +224,278 @@
       var(--surface-2);
     border: 1px solid rgba(71, 85, 105, 0.34);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .light .panel-surface {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.94)),
+      #ffffff;
+    border-color: rgba(231, 224, 208, 0.95);
+    box-shadow:
+      0 8px 24px rgba(15, 31, 61, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  }
+
+  .light .panel-surface-muted {
+    background: linear-gradient(180deg, #ffffff, #fbf8f1);
+    border-color: rgba(231, 224, 208, 0.9);
+    box-shadow:
+      0 6px 18px rgba(15, 31, 61, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+
+  .light [class*="bg-[#0B1020]"],
+  .light [class*="bg-[#0b1020]"],
+  .light [class*="bg-[#0A0F1D]"],
+  .light [class*="bg-[#0a0f1d]"],
+  .light [class*="bg-[#0f0f0f]"],
+  .light [class*="bg-[#181818]"],
+  .light [class*="bg-[#212121]"] {
+    background-color: #fffaf0 !important;
+  }
+
+  .light [class*="bg-[#101827]"],
+  .light [class*="bg-[#111827]"],
+  .light [class*="bg-[#121A2B]"],
+  .light [class*="bg-[#0B1220]"],
+  .light [class*="bg-[#0F172A]"],
+  .light [class*="bg-[#0f1728]"],
+  .light [class*="bg-[#1B263A]"],
+  .light [class*="bg-[#1B263C]"],
+  .light [class*="bg-[#1B2940]"],
+  .light [class*="bg-[#131d31]"],
+  .light [class*="bg-[#18243b]"],
+  .light [class*="bg-[#1c1c1d]"],
+  .light [class*="bg-[#2c2c2e]"],
+  .light [class*="bg-[#3c3c3e]"],
+  .light [class*="bg-[linear-gradient"] {
+    background-color: #ffffff !important;
+    background-image: linear-gradient(180deg, #ffffff 0%, #fbf8f1 100%) !important;
+  }
+
+  .light [class*="bg-[#172033]"],
+  .light [class*="bg-[#172554]"],
+  .light [class*="bg-[#1C2744]"],
+  .light [class*="bg-[#1F2A44]"] {
+    background-color: #ffffff !important;
+  }
+
+  .light [class*="bg-[#1A1118]"],
+  .light [class*="bg-[#1A1220]"],
+  .light [class*="bg-[#1F151A]"],
+  .light [class*="bg-[#2A1317]"],
+  .light [class*="bg-[#2A1821]"],
+  .light [class*="bg-[#301F26]"],
+  .light [class*="bg-[#3B2230]"],
+  .light [class*="bg-[#0E1E1A]"],
+  .light [class*="bg-[#0F2740]"],
+  .light [class*="bg-[#143252]"],
+  .light [class*="bg-[#2A2109]"],
+  .light [class*="bg-[#3A250D]"] {
+    background-color: #fff0ad !important;
+  }
+
+  .light [class*="bg-[#FACC15]"] {
+    background-color: rgba(245, 164, 0, 0.16) !important;
+  }
+
+  .light [class*="bg-[#38BDF8]"] {
+    background-color: rgba(2, 132, 199, 0.1) !important;
+  }
+
+  .light [class*="bg-[#3B82F6]"],
+  .light [class*="bg-[#3b82f6]"] {
+    background-color: #2563eb !important;
+  }
+
+  .light [class*="bg-[#8B5CF6]"] {
+    background-color: rgba(124, 58, 237, 0.1) !important;
+  }
+
+  .light [class*="bg-[#8774e1]"],
+  .light [class*="bg-[#7261cc]"] {
+    background-color: #0f1f3d !important;
+  }
+
+  .light [class*="bg-[#7F1D1D]"] {
+    background-color: rgba(220, 38, 38, 0.12) !important;
+  }
+
+  .light [class*="text-[#F8FAFC]"],
+  .light [class*="text-[#E5E7EB]"],
+  .light [class*="text-white"] {
+    color: #0f1f3d !important;
+  }
+
+  .light [class*="text-[#94A3B8]"],
+  .light [class*="text-[#9CA3AF]"],
+  .light [class*="text-[#64748B]"],
+  .light [class*="text-[#6B7280]"],
+  .light [class*="text-[#D1D5DB]"],
+  .light [class*="text-[#CBD5E1]"],
+  .light [class*="text-[#C7CCD6]"],
+  .light [class*="text-[#e5e5ea]"],
+  .light [class*="text-muted-foreground"] {
+    color: #667085 !important;
+  }
+
+  .light [class*="text-[#FCD34D]"],
+  .light [class*="text-[#FACC15]"] {
+    color: #b45309 !important;
+  }
+
+  .light [class*="text-[#7DD3FC]"],
+  .light [class*="text-[#38BDF8]"],
+  .light [class*="text-[#93C5FD]"],
+  .light [class*="text-[#BFDBFE]"],
+  .light [class*="text-[#DBEAFE]"],
+  .light [class*="text-[#E0F2FE]"] {
+    color: #2563eb !important;
+  }
+
+  .light [class*="text-[#86EFAC]"],
+  .light [class*="text-[#10B981]"],
+  .light [class*="text-[#34D399]"],
+  .light [class*="text-[#6EE7B7]"],
+  .light [class*="text-[#A7F3D0]"],
+  .light [class*="text-[#D1FAE5]"] {
+    color: #15803d !important;
+  }
+
+  .light [class*="text-[#FCA5A5]"],
+  .light [class*="text-[#FECACA]"],
+  .light [class*="text-[#FDA4AF]"],
+  .light [class*="text-[#EF4444]"] {
+    color: #b91c1c !important;
+  }
+
+  .light [class*="text-[#A78BFA]"],
+  .light [class*="text-[#C4B5FD]"],
+  .light [class*="text-[#DDD6FE]"] {
+    color: #6d28d9 !important;
+  }
+
+  .light [class*="text-[#FBBF24]"],
+  .light [class*="text-[#FDE68A]"],
+  .light [class*="text-[#FEF3C7]"],
+  .light [class*="text-[#F59E0B]"],
+  .light [class*="text-[#EAB308]"] {
+    color: #b45309 !important;
+  }
+
+  .light [class*="bg-[#10B981]"],
+  .light [class*="bg-[#10b981]"],
+  .light [class*="bg-[#16A34A]"],
+  .light [class*="bg-[#16a34a]"] {
+    background-color: #16a34a !important;
+  }
+
+  .light [class*="bg-[#EF4444]"],
+  .light [class*="bg-[#ef4444]"],
+  .light [class*="bg-[#DC2626]"],
+  .light [class*="bg-[#dc2626]"] {
+    background-color: #dc2626 !important;
+  }
+
+  .light [class*="bg-[#059669]"],
+  .light [class*="bg-[#0F766E]"],
+  .light [class*="bg-[#115E59]"] {
+    background-color: #0f766e !important;
+  }
+
+  .light [class*="bg-[#D97706]"],
+  .light [class*="bg-[#B45309]"],
+  .light [class*="bg-[#92400E]"] {
+    background-color: #f59e0b !important;
+  }
+
+  .light [class*="bg-[#2563EB]"] {
+    background-color: #2563eb !important;
+  }
+
+  .light [class*="bg-[#10B981]"][class*="text-white"],
+  .light [class*="bg-[#10b981]"][class*="text-white"],
+  .light [class*="bg-[#16A34A]"][class*="text-white"],
+  .light [class*="bg-[#16a34a]"][class*="text-white"],
+  .light [class*="bg-[#EF4444]"][class*="text-white"],
+  .light [class*="bg-[#ef4444]"][class*="text-white"],
+  .light [class*="bg-[#DC2626]"][class*="text-white"],
+  .light [class*="bg-[#dc2626]"][class*="text-white"],
+  .light [class*="bg-[#059669]"][class*="text-white"],
+  .light [class*="bg-[#0F766E]"][class*="text-white"],
+  .light [class*="bg-[#115E59]"][class*="text-white"],
+  .light [class*="bg-[#D97706]"][class*="text-white"],
+  .light [class*="bg-[#B45309]"][class*="text-white"],
+  .light [class*="bg-[#92400E]"][class*="text-white"],
+  .light [class*="bg-[#2563EB]"][class*="text-white"],
+  .light [class*="bg-[#8774e1]"][class*="text-white"],
+  .light [class*="bg-[#7261cc]"][class*="text-white"] {
+    color: #ffffff !important;
+  }
+
+  .light [class*="border-[#22304A]"],
+  .light [class*="border-[#243047]"],
+  .light [class*="border-[#334155]"],
+  .light [class*="border-[#475569]"],
+  .light [class*="border-[#CBD5E1]"],
+  .light [class*="border-[#E2E8F0]"],
+  .light [class*="border-[#1D4ED8]"] {
+    border-color: rgba(231, 224, 208, 0.95) !important;
+  }
+
+  .light [class*="border-[#FACC15]"] {
+    border-color: rgba(245, 158, 11, 0.3) !important;
+  }
+
+  .light [class*="border-[#38BDF8]"] {
+    border-color: rgba(37, 99, 235, 0.24) !important;
+  }
+
+  .light [class*="border-[#8B5CF6]"] {
+    border-color: rgba(124, 58, 237, 0.22) !important;
+  }
+
+  .light [class*="border-[#7F1D1D]"] {
+    border-color: rgba(220, 38, 38, 0.34) !important;
+  }
+
+  .light [class*="shadow-black"],
+  .light [class*="shadow-[#FACC15]"],
+  .light [class*="shadow-[0_"] {
+    box-shadow: 0 8px 24px rgba(15, 31, 61, 0.06) !important;
+  }
+
+  .light input,
+  .light textarea,
+  .light select {
+    background-color: #ffffff !important;
+    border-color: rgba(231, 224, 208, 0.95) !important;
+    color: #0f1f3d !important;
+  }
+
+  .light input::placeholder,
+  .light textarea::placeholder {
+    color: #98a2b3 !important;
+  }
+
+  .light table tr:hover {
+    background-color: rgba(245, 239, 227, 0.72) !important;
+  }
+
+  .light [data-slot="dropdown-menu-content"],
+  .light [data-slot="sheet-content"] {
+    background-color: #ffffff !important;
+    color: #0f1f3d !important;
+    border-color: rgba(231, 224, 208, 0.95) !important;
+  }
+
+  .light [data-slot="button"][class*="bg-[#3B82F6]"] {
+    background-color: #2563eb !important;
+    color: #ffffff !important;
+  }
+
+  .light [class*="border-[#212121]"],
+  .light [class*="border-[#2c2c2e]"] {
+    border-color: rgba(231, 224, 208, 0.95) !important;
   }
 }

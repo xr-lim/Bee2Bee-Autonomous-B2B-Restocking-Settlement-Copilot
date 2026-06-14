@@ -30,6 +30,21 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const themeScript = `
+    (() => {
+      try {
+        const stored = window.localStorage.getItem("bee2bee_theme");
+        const mode = stored === "light" ? "light" : "dark";
+        document.documentElement.classList.toggle("light", mode === "light");
+        document.documentElement.classList.toggle("dark", mode === "dark");
+        document.documentElement.dataset.theme = mode;
+      } catch (_) {
+        document.documentElement.classList.add("dark");
+        document.documentElement.dataset.theme = "dark";
+      }
+    })();
+  `
+
   return (
     <html
       lang="en"
@@ -37,6 +52,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="min-h-full bg-[#0B1020] text-[#E5E7EB]">
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <AppShell>{children}</AppShell>
       </body>
     </html>
